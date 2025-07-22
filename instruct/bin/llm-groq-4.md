@@ -13,17 +13,20 @@ and the code should do the following with them:
 
 - if the file exists, then the prompt needs to be different:
 
-   "Please verify that the description below (enclosed into <result-description></result-description>) matches the specimen (enclosed into <result-specimen></result-specimen>) as much as possible. If it does - then simply output the content of the result-specimen verbatim. If you find that there are imperfections in how result-specimen fulfills its purpose described in result-description, then improve it and output the full result, with your improvements. Do not delimit the result with anything, output it verbatim." 
+   "Please verify that the description below (enclosed into <result-description></result-description>) matches the specimen (enclosed into <result-specimen></result-specimen>) as much as possible, taking into account the possible presence of compiler errors (enclosed into <compiler-errors></compiler-errors>. If it does - then simply output the content of the result-specimen verbatim. If you find that there are imperfections in how result-specimen fulfills its purpose described in result-description, then improve it and output the full result, with your improvements. Do not delimit the result with anything, output it verbatim."
+
+To this string you need to append: preprocessed input file inside "<result-description></result-description>", current data from output file inside "<result-specimen></result-specimen>" (save it into variable "original_content"), and first_compiler_errors variable.
+
+In order to populate the first_compiler_errors compiler errors string, perform "cargo check" with necessary flags to obtain json output, and filter the only the error messages (not warnings!) from stdout, only that relate to the file in question. Limit the count of error messages to 20. 
+Keep this output also as "first_compiler_errors" variable for future reference.
 
 Save the entire request into a file "/tmp/llm-req-<pid>-gen.txt" for reference.
 
 Get the response from LLM, save it in its entirety into "/tmp/llm-req-<pid>-gen-resp.txt".
 
-Perform "cargo check" with necessary flags to obtain json output, and filter the only the error messages (not warnings!) from stdout, only that relate to the file in question. Limit the count of error messages to 20.
-
 Save the copy of new LLM reply into output file.
 
-Perform "cargo check" with necessary flags to obtain json output *AGAIN*, and again filter the error messages only (not warnings!), that relate to the file in question. Limit the count of error messages to 20 again.
+Perform "cargo check" on the new file with necessary flags to obtain json output *AGAIN*, and again filter the error messages only (not warnings!), that relate to the file in question. Limit the count of error messages to 20 again. Store in "second_compiler_errors" variable.
 
 After obtaining the reply from LLM, and before rewriting the output_result file, it should submit another request with the following prompt: "Please CAREFULLY evaluate the below description (enclosed into <result-description></result-description>), and two outputs corresponding to this description, first one enclosed into "<first-result></first-result>" and the second enclosed into "<second-result></second-result>", with compile errors of first result included into "<first-compile-errors></first-compile-errors>" and second compile errors as "<second-compile-errors></second-compile-errors>", and evaluate which of the two is more precise and correct in implementing the description - and also which of them compiles! Then, if the first result is better, output the phrase 'First result is better.', if the second result is better, output the phrase 'The second implementation is better.'. Output only one of the two phrases, and nothing else"
 

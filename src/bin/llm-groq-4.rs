@@ -44,6 +44,18 @@ fn main() {
     let req_path_eval = format!("/tmp/llm-req-{}-eval.txt", pid);
     let resp_path_eval = format!("/tmp/llm-req-{}-eval-resp.txt", pid);
 
+    let original_content = if output_path.exists() {
+        fs::read_to_string(output_file).unwrap_or_default()
+    } else {
+        String::new()
+    };
+
+    let first_compiler_errors = if output_path.exists() {
+        run_cargo_check(output_file)
+    } else {
+        Vec::new()
+    };
+
     let prompt = if !output_path.exists()
         || fs::metadata(output_path)
             .map(|m| m.len() == 0)
@@ -56,10 +68,9 @@ fn main() {
         )
     } else {
         eprintln!("Output file exists - using verification prompt");
-        let specimen = fs::read_to_string(output_file).unwrap_or_default();
         format!(
-            "Please verify that the description below (enclosed into <result-description></result-description>) matches the specimen (enclosed into <result-specimen></result-specimen>) as much as possible. If it does - then simply output the content of the result-specimen verbatim. If you find that there are imperfections in how result-specimen fulfills its purpose described in result-description, then improve it and output the full result, with your improvements. Do not delimit the result with anything, output it verbatim.\n\n<result-description>\n{}\n</result-description>\n\n<result-specimen>\n{}\n</result-specimen>",
-            description, specimen
+            "Please verify that the description below (enclosed into <result-description></result-description>) matches the specimen (enclosed into <result-specimen></result-specimen>) as much as possible, taking into account the possible presence of compiler errors (enclosed into <compiler-errors></compiler-errors>. If it does - then simply output the content of the result-specimen verbatim. If you find that there are imperfections in how result-specimen fulfills its purpose described in result-description, then improve it and output the full result, with your improvements. Do not delimit the result with anything, output it verbatim.\n\n<result-description>\n{}\n</result-description>\n\n<result-specimen>\n{}\n</result-specimen>\n\n<compiler-errors>\n{}\n</compiler-errors>",
+            description, original_content, first_compiler_errors.join("\n")
         )
     };
 
@@ -79,24 +90,15 @@ fn main() {
     fs::write(&draft_path, &response)
         .unwrap_or_else(|_| panic!("Failed to write draft file: {}", draft_path));
 
-    eprintln!("Running first cargo check");
-    let first_compile_errors = run_cargo_check(output_file);
-
-    let original_content = if output_path.exists() {
-        fs::read_to_string(output_file).unwrap_or_default()
-    } else {
-        String::new()
-    };
-
     let temp_path = format!("{}.tmp", output_file);
     fs::write(&temp_path, &response)
         .unwrap_or_else(|_| panic!("Failed to write temporary file"));
     
-    let second_compile_errors = run_cargo_check(&temp_path);
+    let second_compiler_errors = run_cargo_check(&temp_path);
 
     let eval_prompt = format!(
         "Please CAREFULLY evaluate the below description (enclosed into <result-description></result-description>), and two outputs corresponding to this description, first one enclosed into \"<first-result></first-result>\" and the second enclosed into \"<second-result></second-result>\", with compile errors of first result included into \"<first-compile-errors></first-compile-errors>\" and second compile errors as \"<second-compile-errors></second-compile-errors>\", and evaluate which of the two is more precise and correct in implementing the description - and also which of them compiles! Then, if the first result is better, output the phrase 'First result is better.', if the second result is better, output the phrase 'The second implementation is better.'. Output only one of the two phrases, and nothing else\n\n<result-description>\n{}\n</result-description>\n\n<first-result>\n{}</first-result>\n\n<second-result>\n{}</second-result>\n\n<first-compile-errors>\n{}</first-compile-errors>\n\n<second-compile-errors>\n{}</second-compile-errors>",
-        description, original_content, response, first_compile_errors.join("\n"), second_compile_errors.join("\n")
+        description, original_content, response, first_compiler_errors.join("\n"), second_compiler_errors.join("\n")
     );
 
     eprintln!("Saving evaluation request to: {}", req_path_eval);
@@ -116,7 +118,7 @@ fn main() {
 
     if trimmed == "First result is better." {
         eprintln!("First result is better");
-        if first_compile_errors.is_empty() {
+        if first_compiler_errors.is_empty() {
             eprintln!("No compile errors, restoring original");
             if Path::new(&draft_path).exists() {
                 fs::rename(&draft_path, &rej_path)
@@ -163,7 +165,7 @@ fn run_cargo_check(file_path: &str) -> Vec<String> {
     for line in stdout.lines() {
         if let Ok(json) = serde_json::from_str::<serde_json::Value>(line) {
             if let Some(rendered) = json.get("rendered").and_then(|v| v.as_str()) {
-                if rendered.contains(file_path) && !rendered.contains("warning: ") {
+                if rendered.contains(file_path) && rendered.contains("error: ") {
                     errors.push(rendered.to_string());
                 }
             }

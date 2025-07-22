@@ -1,5 +1,5 @@
 # Default binary
-DEFAULT_BINARY = llm-groq-4
+DEFAULT_BINARY = llm-groq-3
 
 # Automatically discover all .md files in instruct/ and convert to corresponding .rs files in src/bin/
 INSTRUCT_FILES := $(shell find instruct/ -name "*.md")
