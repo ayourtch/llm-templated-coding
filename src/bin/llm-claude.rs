@@ -163,7 +163,6 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             "First result is better." => {
                 eprintln!("Keeping existing output file unchanged, updating mtime.");
                 // Update mtime on the output file
-                let metadata = fs::metadata(output_file)?;
                 filetime::set_file_mtime(output_file, filetime::FileTime::now())?;
                 
                 // Rename draft file to .rej since it wasn't accepted
