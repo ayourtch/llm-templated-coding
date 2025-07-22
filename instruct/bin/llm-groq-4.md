@@ -7,7 +7,7 @@ and the code should do the following with them:
 
 - before doing anything else, verify that the output file is either not existstent, or perform "git status <output_file>" and verify that the file is not modified.
 
-- if the output file is non-existent or empty, it should just feed the contents of the input file after the following preamble: 
+- if the output file is non-existent or empty, it should just feed the preprocessed contents (see 'preprocessing note') of the input file after the following preamble: 
 
    "Please produce single output result, which would match the description below as well as you can:"; 
 
@@ -19,11 +19,11 @@ Save the entire request into a file "/tmp/llm-req-<pid>-gen.txt" for reference.
 
 Get the response from LLM, save it in its entirety into "/tmp/llm-req-<pid>-gen-resp.txt".
 
-Perform "cargo check" with necessary flags to obtain json output, and filter the error messages only, that relate to the file in question.
+Perform "cargo check" with necessary flags to obtain json output, and filter the only the error messages (not warnings!) from stdout, only that relate to the file in question. Limit the count of error messages to 20.
 
 Save the copy of new LLM reply into output file.
 
-Perform "cargo check" with necessary flags to obtain json output *AGAIN*, and filter the error messages only, that relate to the file in question.
+Perform "cargo check" with necessary flags to obtain json output *AGAIN*, and again filter the error messages only (not warnings!), that relate to the file in question. Limit the count of error messages to 20 again.
 
 After obtaining the reply from LLM, and before rewriting the output_result file, it should submit another request with the following prompt: "Please CAREFULLY evaluate the below description (enclosed into <result-description></result-description>), and two outputs corresponding to this description, first one enclosed into "<first-result></first-result>" and the second enclosed into "<second-result></second-result>", with compile errors of first result included into "<first-compile-errors></first-compile-errors>" and second compile errors as "<second-compile-errors></second-compile-errors>", and evaluate which of the two is more precise and correct in implementing the description - and also which of them compiles! Then, if the first result is better, output the phrase 'First result is better.', if the second result is better, output the phrase 'The second implementation is better.'. Output only one of the two phrases, and nothing else"
 
@@ -44,6 +44,10 @@ Important: do not delete the draft file, unless you have used the result from it
 Use lower temperature (0.1) and fewer max_tokens (100) for the evaluation call to get more consistent responses.
 
 Only updates the file when the new implementation is deemed better.
+
+# preprocessing note
+
+Use "lib::preprocess::preprocess(filename)" to get the contents of the file with preprocesing, rather than simply reading the file.
 
 # Implementation details
 

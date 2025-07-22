@@ -1,7 +1,7 @@
 use std::env;
 use std::fs;
-use std::path::Path;
-use std::process::Command;
+use std::path::{Path, PathBuf};
+use std::process::{Command, Stdio};
 use std::time::SystemTime;
 use filetime::FileTime;
 
@@ -32,8 +32,7 @@ fn main() {
     }
 
     eprintln!("Reading input file: {}", input_file);
-    let description = fs::read_to_string(input_file)
-        .unwrap_or_else(|_| panic!("Failed to read input file: {}", input_file));
+    let description = lib::preprocess::preprocess(input_file);
 
     let output_path = Path::new(output_file);
     let draft_path = format!("{}.draft", output_file);
@@ -89,11 +88,11 @@ fn main() {
         String::new()
     };
 
-    fs::write(output_file, &response)
-        .unwrap_or_else(|_| panic!("Failed to write output file temporarily for second check"));
+    let temp_path = format!("{}.tmp", output_file);
+    fs::write(&temp_path, &response)
+        .unwrap_or_else(|_| panic!("Failed to write temporary file"));
     
-    eprintln!("Running second cargo check");
-    let second_compile_errors = run_cargo_check(output_file);
+    let second_compile_errors = run_cargo_check(&temp_path);
 
     let eval_prompt = format!(
         "Please CAREFULLY evaluate the below description (enclosed into <result-description></result-description>), and two outputs corresponding to this description, first one enclosed into \"<first-result></first-result>\" and the second enclosed into \"<second-result></second-result>\", with compile errors of first result included into \"<first-compile-errors></first-compile-errors>\" and second compile errors as \"<second-compile-errors></second-compile-errors>\", and evaluate which of the two is more precise and correct in implementing the description - and also which of them compiles! Then, if the first result is better, output the phrase 'First result is better.', if the second result is better, output the phrase 'The second implementation is better.'. Output only one of the two phrases, and nothing else\n\n<result-description>\n{}\n</result-description>\n\n<first-result>\n{}</first-result>\n\n<second-result>\n{}</second-result>\n\n<first-compile-errors>\n{}</first-compile-errors>\n\n<second-compile-errors>\n{}</second-compile-errors>",
@@ -136,8 +135,8 @@ fn main() {
         }
     } else if trimmed == "The second implementation is better." {
         eprintln!("Second implementation is better");
-        fs::write(output_file, &response)
-            .unwrap_or_else(|_| panic!("Failed to write output file"));
+        fs::rename(&temp_path, output_file)
+            .unwrap_or_else(|_| panic!("Failed to move temporary file to output file"));
         if Path::new(&draft_path).exists() {
             fs::remove_file(&draft_path)
                 .unwrap_or_else(|_| panic!("Failed to remove draft file"));
@@ -150,18 +149,30 @@ fn main() {
     eprintln!("Program completed successfully");
 }
 
-fn run_cargo_check(output_file: &str) -> Vec<String> {
+fn run_cargo_check(file_path: &str) -> Vec<String> {
     let output = Command::new("cargo")
         .args(&["check", "--message-format", "json"])
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
         .output()
         .expect("Failed to execute cargo check");
 
-    let stderr = String::from_utf8_lossy(&output.stderr);
+    let stdout = String::from_utf8_lossy(&output.stdout);
     let mut errors = Vec::new();
-    for line in stderr.lines() {
-        if line.contains(output_file) {
-            errors.push(line.to_string());
+    
+    for line in stdout.lines() {
+        if let Ok(json) = serde_json::from_str::<serde_json::Value>(line) {
+            if let Some(rendered) = json.get("rendered").and_then(|v| v.as_str()) {
+                if rendered.contains(file_path) && !rendered.contains("warning: ") {
+                    errors.push(rendered.to_string());
+                }
+            }
         }
     }
+
+    if errors.len() > 20 {
+        errors.truncate(20);
+    }
+
     errors
 }
