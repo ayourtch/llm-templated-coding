@@ -110,7 +110,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         
         // Make evaluation API call
         let eval_payload = json!({
-            "model": "claude-opus-4-20250514",
+            "model": "claude-sonnet-4-20250514",
             "max_tokens": 100,
             "temperature": 0.1,
             "messages": [{
