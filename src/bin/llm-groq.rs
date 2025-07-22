@@ -150,6 +150,19 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 // Update mtime as requested
                 let file_time = FileTime::from_system_time(SystemTime::now());
                 filetime::set_file_mtime(output_file, file_time)?;
+                
+                // Output the diff between original and rejected version
+                let output = std::process::Command::new("diff")
+                    .arg("-c")
+                    .arg(output_file)
+                    .arg(&rejected_file)
+                    .output()?;
+                
+                if !output.stdout.is_empty() {
+                    eprintln!("Diff between original and rejected output:");
+                    io::stdout().write_all(&output.stdout)?;
+                }
+                
                 return Ok(());
             },
             "The second implementation is better." => {
