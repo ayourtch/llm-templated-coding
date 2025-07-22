@@ -3,10 +3,12 @@ use std::fs;
 use std::path::Path;
 use std::process::Command;
 use std::time::SystemTime;
+use filetime::FileTime;
 
 mod lib;
 
 fn main() {
+    eprintln!("Starting program");
     let args: Vec<String> = env::args().collect();
     if args.len() != 3 {
         eprintln!("Usage: {} <input_file> <output_file>", args[0]);
@@ -15,6 +17,7 @@ fn main() {
     let input_file = &args[1];
     let output_file = &args[2];
 
+    eprintln!("Reading input file: {}", input_file);
     let description = fs::read_to_string(input_file)
         .unwrap_or_else(|_| panic!("Failed to read input file: {}", input_file));
 
@@ -31,11 +34,13 @@ fn main() {
             .map(|m| m.len() == 0)
             .unwrap_or(true)
     {
+        eprintln!("Output file doesn't exist or is empty - using initial prompt");
         format!(
             "Please produce single output result, which would match the description below as well as you can:\n\n{}",
             description
         )
     } else {
+        eprintln!("Output file exists - using verification prompt");
         let specimen = fs::read_to_string(output_file).unwrap_or_default();
         format!(
             "Please verify that the description below (enclosed into <result-description></result-description>) matches the specimen (enclosed into <result-specimen></result-specimen>) as much as possible. If it does - then simply output the content of the result-specimen verbatim. If you find that there are imperfections in how result-specimen fulfills its purpose described in result-description, then improve it and output the full result, with your improvements. Do not delimit the result with anything, output it verbatim.\n\n<result-description>\n{}\n</result-description>\n\n<result-specimen>\n{}\n</result-specimen>",
@@ -43,15 +48,19 @@ fn main() {
         )
     };
 
+    eprintln!("Saving request to: {}", req_path);
     fs::write(&req_path, &prompt)
         .unwrap_or_else(|_| panic!("Failed to write request file: {}", req_path));
 
+    eprintln!("Calling Groq API");
     let groq = lib::groq::Groq::new();
     let response = groq.evaluate(&prompt);
 
+    eprintln!("Writing draft to: {}", draft_path);
     fs::write(&draft_path, &response)
         .unwrap_or_else(|_| panic!("Failed to write draft file: {}", draft_path));
 
+    eprintln!("Running cargo check");
     let compile_check = Command::new("cargo")
         .args(&["check", "--message-format", "json"])
         .output()
@@ -72,6 +81,7 @@ fn main() {
     };
 
     if output_path.exists() {
+        eprintln!("Renaming original file to: {}", orig_path);
         fs::rename(output_file, &orig_path)
             .unwrap_or_else(|_| panic!("Failed to rename original file"));
     }
@@ -81,16 +91,22 @@ fn main() {
         description, original_content, response, compile_errors.join("\n")
     );
 
-    let eval_response = groq.evaluate(&eval_prompt);
+    eprintln!("Calling Groq API for evaluation");
+    let groq_eval = lib::groq::Groq::new();
+    let eval_response = groq_eval.evaluate(&eval_prompt);
     let trimmed = eval_response.trim();
 
+    eprintln!("Evaluation result: {}", trimmed);
+
     if trimmed == "First result is better." {
+        eprintln!("First result is better");
         if compile_errors.is_empty() {
+            eprintln!("No compile errors, restoring original");
             if Path::new(&orig_path).exists() {
                 fs::rename(&orig_path, output_file)
                     .unwrap_or_else(|_| panic!("Failed to restore original file"));
                 let now = SystemTime::now();
-                filetime::set_file_mtime(output_file, filetime::FileTime::from_system_time(now))
+                filetime::set_file_mtime(output_file, FileTime::from_system_time(now))
                     .expect("Failed to update mtime");
             }
             if Path::new(&draft_path).exists() {
@@ -98,14 +114,15 @@ fn main() {
                     .unwrap_or_else(|_| panic!("Failed to rename rejected draft"));
             }
         } else {
+            eprintln!("First result better but has compile errors");
             if Path::new(&draft_path).exists() {
                 fs::rename(&draft_path, &rej_path)
                     .unwrap_or_else(|_| panic!("Failed to rename rejected draft"));
             }
-            eprintln!("First result better but has compile errors");
             std::process::exit(1);
         }
     } else if trimmed == "The second implementation is better." {
+        eprintln!("Second implementation is better");
         fs::write(output_file, &response)
             .unwrap_or_else(|_| panic!("Failed to write output file"));
         if Path::new(&draft_path).exists() {
@@ -116,4 +133,6 @@ fn main() {
         eprintln!("Unexpected evaluation response: {}", trimmed);
         std::process::exit(1);
     }
+
+    eprintln!("Program completed successfully");
 }

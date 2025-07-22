@@ -32,10 +32,6 @@ Important: do not delete the draft file, unless you have used the result from it
 
 Use lower temperature (0.1) and fewer max_tokens (100) for the evaluation call to get more consistent responses.
 
-Trim whitespace from evaluation response to handle potential formatting differences.
-
-Provides clear error messages and status updates.
-
 Only updates the file when the new implementation is deemed better.
 
 # Implementation details
@@ -46,4 +42,6 @@ Then, "lib::groq::Groq::new()" will return you a new instance of Groq, and calli
 on that instance will return you the evaluated response.
 
 The program must be in a simple sync fashion, do not use async please.
+
+Before each action - e.g. making LLM requests, renaming files, calling cargo check, etc. - send a short status message to stderr.
 

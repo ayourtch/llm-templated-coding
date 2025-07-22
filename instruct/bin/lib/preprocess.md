@@ -11,11 +11,11 @@ Code would expose a single function:
 The work that this function does:
 
   Read the file with the given file_name, and look through its contents.
-  If there is a string '{!filename!}' in the file, replace that text with the preprocessed contents of that filename path.
-  If the last line of the included file does not end with a newline character, add it.
-  File paths are relative to the current directory if they are not fully qualified.
-
-There should be a maximum include depth of 32 - if it is reached, the file should not be processed, but rather a string "TOO MUCH NESTED INCLUDES" should be inserted in place of contents.
+  Find all occurrences of the pattern {!filename!} where filename is a path to another file.
+  Replace each such occurrence with the preprocessed contents of that filename path.
+  Relative paths are resolved relative to the directory containing the file being processed.
+  After processing all includes, ensure the final result ends with a newline character by adding one if missing.
+  If an include depth of 32 is reached, insertion of "TOO MUCH NESTED INCLUDES" should occur instead of processing the file further.
 
 # Testing
 
@@ -29,3 +29,13 @@ There should be a maximum include depth of 32 - if it is reached, the file shoul
 - If you want to include any other content, like suggestions on what to put in other files, include inside multiline comment and explain accordingly ("/* */")
 - IMPORTANT: the result MUST compile!
 
+/*
+Cargo.toml:
+[package]
+name = "text_preprocessor"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+tempfile = "3.10"
+*/
