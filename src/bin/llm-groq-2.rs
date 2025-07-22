@@ -28,7 +28,9 @@ fn main() {
 
     let pid = std::process::id();
     let req_path_gen = format!("/tmp/llm-req-{}-gen.txt", pid);
+    let resp_path_gen = format!("/tmp/llm-req-{}-gen-resp.txt", pid);
     let req_path_eval = format!("/tmp/llm-req-{}-eval.txt", pid);
+    let resp_path_eval = format!("/tmp/llm-req-{}-eval-resp.txt", pid);
 
     let prompt = if !output_path.exists()
         || fs::metadata(output_path)
@@ -57,11 +59,15 @@ fn main() {
     let groq = lib::groq::Groq::new();
     let response = groq.evaluate(&prompt);
 
+    eprintln!("Saving response to: {}", resp_path_gen);
+    fs::write(&resp_path_gen, &response)
+        .unwrap_or_else(|_| panic!("Failed to write response file: {}", resp_path_gen));
+
     eprintln!("Writing draft to: {}", draft_path);
     fs::write(&draft_path, &response)
         .unwrap_or_else(|_| panic!("Failed to write draft file: {}", draft_path));
 
-    eprintln!("Running cargo check");
+    eprintln!("Running first cargo check");
     let compile_check = Command::new("cargo")
         .args(&["check", "--message-format", "json"])
         .output()
@@ -114,6 +120,10 @@ fn main() {
     let groq_eval = lib::groq::Groq::new();
     let eval_response = groq_eval.evaluate(&eval_prompt);
     let trimmed = eval_response.trim();
+
+    eprintln!("Saving evaluation response to: {}", resp_path_eval);
+    fs::write(&resp_path_eval, &eval_response)
+        .unwrap_or_else(|_| panic!("Failed to write evaluation response file"));
 
     eprintln!("Evaluation result: {}", trimmed);
 
