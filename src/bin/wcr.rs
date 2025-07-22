@@ -55,11 +55,36 @@ fn main() {
     let mut unmatched_rs = Stats::default();
     let mut unmatched_count = 0usize;
 
-    let walker = match fs::read_dir(md_root) {
+    visit_md_dir(md_root, md_root, rs_root, &mut total_md, &mut total_matching_rs);
+
+    let mut unmatched_rs_files = Vec::new();
+    visit_rs_dir(rs_root, rs_root, md_root, &mut unmatched_rs, &mut unmatched_count, &mut unmatched_rs_files);
+
+    println!("=== Summary ===");
+    println!("Total .md files: bytes={}, lines={}", total_md.bytes, total_md.lines);
+    println!("Total matching .rs files: bytes={}, lines={}", total_matching_rs.bytes, total_matching_rs.lines);
+    println!("Unmatched .rs files: {} files, bytes={}, lines={}", unmatched_count, unmatched_rs.bytes, unmatched_rs.lines);
+
+    if !unmatched_rs_files.is_empty() {
+        println!("\n=== Unmatched .rs files ===");
+        for (path, stats) in unmatched_rs_files {
+            println!("{}: bytes={}, lines={}", path.display(), stats.bytes, stats.lines);
+        }
+    }
+}
+
+fn visit_md_dir(
+    dir: &Path,
+    md_root: &Path,
+    rs_root: &Path,
+    total_md: &mut Stats,
+    total_matching_rs: &mut Stats,
+) {
+    let walker = match fs::read_dir(dir) {
         Ok(w) => w,
         Err(e) => {
-            eprintln!("Error reading md_dir: {}", e);
-            std::process::exit(1);
+            eprintln!("Error reading dir {}: {}", dir.display(), e);
+            return;
         }
     };
 
@@ -67,112 +92,108 @@ fn main() {
         let entry = match entry {
             Ok(e) => e,
             Err(e) => {
-                eprintln!("Error enumerating md_dir: {}", e);
+                eprintln!("Error enumerating {}: {}", dir.display(), e);
                 continue;
             }
         };
-        visit_md(entry.path(), md_root, rs_root, &mut total_md, &mut total_matching_rs);
-    }
-
-    let rs_walker = match fs::read_dir(rs_root) {
-        Ok(w) => w,
-        Err(e) => {
-            eprintln!("Error reading rs_dir: {}", e);
-            std::process::exit(1);
-        }
-    };
-
-    for entry in rs_walker {
-        let entry = match entry {
-            Ok(e) => e,
+        let path = entry.path();
+        let meta = match fs::metadata(&path) {
+            Ok(m) => m,
             Err(e) => {
-                eprintln!("Error enumerating rs_dir: {}", e);
+                eprintln!("Error accessing {}: {}", path.display(), e);
                 continue;
             }
         };
-        let rs_path = entry.path();
-        if rs_path.extension().and_then(|s| s.to_str()) == Some("rs") {
-            let md_path = build_md_path(&rs_path, rs_root, md_root);
-            if !md_path.exists() {
-                let stats = Stats::from_path(&rs_path).unwrap_or_default();
-                unmatched_rs.bytes += stats.bytes;
-                unmatched_rs.lines += stats.lines;
-                unmatched_count += 1;
-            }
-        }
-    }
 
-    println!("=== Summary ===");
-    println!("Total .md files: bytes={}, lines={}", total_md.bytes, total_md.lines);
-    println!("Total matching .rs files: bytes={}, lines={}", total_matching_rs.bytes, total_matching_rs.lines);
-    println!("Unmatched .rs files: {} files, bytes={}, lines={}", unmatched_count, unmatched_rs.bytes, unmatched_rs.lines);
-}
-
-fn visit_md(
-    path: PathBuf,
-    md_root: &Path,
-    rs_root: &Path,
-    total_md: &mut Stats,
-    total_matching_rs: &mut Stats,
-) {
-    let meta = match fs::metadata(&path) {
-        Ok(m) => m,
-        Err(e) => {
-            eprintln!("Error accessing {}: {}", path.display(), e);
-            return;
-        }
-    };
-
-    if meta.is_dir() {
-        let walker = match fs::read_dir(&path) {
-            Ok(w) => w,
-            Err(e) => {
-                eprintln!("Error reading dir {}: {}", path.display(), e);
-                return;
-            }
-        };
-        for entry in walker {
-            let entry = match entry {
-                Ok(e) => e,
+        if meta.is_dir() {
+            visit_md_dir(&path, md_root, rs_root, total_md, total_matching_rs);
+        } else if path.extension().and_then(|s| s.to_str()) == Some("md") {
+            let rs_path = build_rs_path(&path, md_root, rs_root);
+            let md_stats = match Stats::from_path(&path) {
+                Ok(s) => s,
                 Err(e) => {
-                    eprintln!("Error enumerating {}: {}", path.display(), e);
+                    eprintln!("Error reading {}: {}", path.display(), e);
                     continue;
                 }
             };
-            visit_md(entry.path(), md_root, rs_root, total_md, total_matching_rs);
-        }
-    } else if path.extension().and_then(|s| s.to_str()) == Some("md") {
-        let rs_path = build_rs_path(&path, md_root, rs_root);
-        let md_stats = match Stats::from_path(&path) {
-            Ok(s) => s,
-            Err(e) => {
-                eprintln!("Error reading {}: {}", path.display(), e);
-                return;
-            }
-        };
-        *total_md = Stats {
-            bytes: total_md.bytes + md_stats.bytes,
-            lines: total_md.lines + md_stats.lines,
-        };
+            *total_md = Stats {
+                bytes: total_md.bytes + md_stats.bytes,
+                lines: total_md.lines + md_stats.lines,
+            };
 
-        if !rs_path.exists() {
-            eprintln!("Warning: matching .rs file not found: {}", rs_path.display());
+            if !rs_path.exists() {
+                eprintln!("Warning: matching .rs file not found: {}", rs_path.display());
+                continue;
+            }
+            let rs_stats = match Stats::from_path(&rs_path) {
+                Ok(s) => s,
+                Err(e) => {
+                    eprintln!("Error reading {}: {}", rs_path.display(), e);
+                    continue;
+                }
+            };
+            *total_matching_rs = Stats {
+                bytes: total_matching_rs.bytes + rs_stats.bytes,
+                lines: total_matching_rs.lines + rs_stats.lines,
+            };
+            println!("Pair: {} .md -> {} .rs", path.display(), rs_path.display());
+            println!("  md:  bytes={}, lines={}", md_stats.bytes, md_stats.lines);
+            println!("  rs:  bytes={}, lines={}", rs_stats.bytes, rs_stats.lines);
+        }
+    }
+}
+
+fn visit_rs_dir(
+    dir: &Path,
+    rs_root: &Path,
+    md_root: &Path,
+    unmatched_rs: &mut Stats,
+    unmatched_count: &mut usize,
+    unmatched_rs_files: &mut Vec<(PathBuf, Stats)>,
+) {
+    let walker = match fs::read_dir(dir) {
+        Ok(w) => w,
+        Err(e) => {
+            eprintln!("Error reading dir {}: {}", dir.display(), e);
             return;
         }
-        let rs_stats = match Stats::from_path(&rs_path) {
-            Ok(s) => s,
+    };
+
+    for entry in walker {
+        let entry = match entry {
+            Ok(e) => e,
             Err(e) => {
-                eprintln!("Error reading {}: {}", rs_path.display(), e);
-                return;
+                eprintln!("Error enumerating {}: {}", dir.display(), e);
+                continue;
             }
         };
-        *total_matching_rs = Stats {
-            bytes: total_matching_rs.bytes + rs_stats.bytes,
-            lines: total_matching_rs.lines + rs_stats.lines,
+        let path = entry.path();
+        let meta = match fs::metadata(&path) {
+            Ok(m) => m,
+            Err(e) => {
+                eprintln!("Error accessing {}: {}", path.display(), e);
+                continue;
+            }
         };
-        println!("Pair: {} .md -> {} .rs", path.display(), rs_path.display());
-        println!("  md:  bytes={}, lines={}", md_stats.bytes, md_stats.lines);
-        println!("  rs:  bytes={}, lines={}", rs_stats.bytes, rs_stats.lines);
+
+        if meta.is_dir() {
+            visit_rs_dir(&path, rs_root, md_root, unmatched_rs, unmatched_count, unmatched_rs_files);
+        } else if path.extension().and_then(|s| s.to_str()) == Some("rs") {
+            let md_path = build_md_path(&path, rs_root, md_root);
+            if !md_path.exists() {
+                let stats = match Stats::from_path(&path) {
+                    Ok(s) => s,
+                    Err(e) => {
+                        eprintln!("Error reading {}: {}", path.display(), e);
+                        continue;
+                    }
+                };
+                unmatched_rs.bytes += stats.bytes;
+                unmatched_rs.lines += stats.lines;
+                *unmatched_count += 1;
+                unmatched_rs_files.push((path, stats));
+            }
+        }
     }
 }
 
