@@ -85,6 +85,72 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .as_str()
         .ok_or("Failed to extract generated text from response")?;
     
+    // If output file exists and has content, we need to compare
+    if output_exists_and_not_empty {
+        let existing_output = fs::read_to_string(output_file)
+            .map_err(|e| format!("Failed to read existing output file {}: {}", output_file, e))?;
+        
+        // Prepare evaluation prompt
+        let evaluation_prompt = format!(
+            "Please evaluate the below description (enclosed into <result-description></result-description>), and two outputs corresponding to this description, first one enclosed into \"<first-result></first-result>\" and the second enclosed into \"<second-result></second-result>\", and evaluate which of the two is more precise and correct in implementing the description. Then, if the first result is better, output the phrase 'First result is better', if the second result is better, output the phrase 'The second implementation is better'. Output only one of the two phrases, and nothing else.\n\n<result-description>\n{}\n</result-description>\n\n<first-result>\n{}\n</first-result>\n\n<second-result>\n{}\n</second-result>",
+            input_content,
+            existing_output,
+            generated_text
+        );
+        
+        // Make evaluation API call
+        let eval_payload = json!({
+            "model": "moonshotai/kimi-k2-instruct",
+            "messages": [{
+                "role": "user",
+                "content": evaluation_prompt
+            }],
+            "temperature": 0.1,
+            "max_tokens": 100,
+            "top_p": 0.95,
+            "stream": false
+        });
+        
+        let eval_response = client
+            .post(url)
+            .header("Content-Type", "application/json")
+            .header("Authorization", format!("Bearer {}", api_key))
+            .json(&eval_payload)
+            .send()
+            .await?;
+        
+        if !eval_response.status().is_success() {
+            let error_text = eval_response.text().await?;
+            eprintln!("Evaluation API request failed: {}", error_text);
+            process::exit(1);
+        }
+        
+        let eval_response_json: Value = eval_response.json().await?;
+        let evaluation_result = eval_response_json
+            ["choices"][0]["message"]["content"]
+            .as_str()
+            .ok_or("Failed to extract evaluation result from response")?
+            .trim();
+        
+        eprintln!("Evaluation result: {}", evaluation_result);
+        
+        match evaluation_result {
+            "First result is better" => {
+                eprintln!("Keeping existing output file unchanged.");
+                return Ok(());
+            },
+            "The second implementation is better" => {
+                eprintln!("Updating output file with new content.");
+                // Continue to write the new content below
+            },
+            _ => {
+                eprintln!("Error: Unexpected evaluation result: '{}'", evaluation_result);
+                eprintln!("Expected either 'First result is better' or 'The second implementation is better'");
+                process::exit(1);
+            }
+        }
+    }
+    
     // Write the result to the output file
     fs::write(output_file, generated_text)
         .map_err(|e| format!("Failed to write to {}: {}", output_file, e))?;
