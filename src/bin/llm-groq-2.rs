@@ -27,7 +27,8 @@ fn main() {
     let rej_path = format!("{}.rej", output_file);
 
     let pid = std::process::id();
-    let req_path = format!("/tmp/llm-req-{}.txt", pid);
+    let req_path_gen = format!("/tmp/llm-req-{}-gen.txt", pid);
+    let req_path_eval = format!("/tmp/llm-req-{}-eval.txt", pid);
 
     let prompt = if !output_path.exists()
         || fs::metadata(output_path)
@@ -48,9 +49,9 @@ fn main() {
         )
     };
 
-    eprintln!("Saving request to: {}", req_path);
-    fs::write(&req_path, &prompt)
-        .unwrap_or_else(|_| panic!("Failed to write request file: {}", req_path));
+    eprintln!("Saving request to: {}", req_path_gen);
+    fs::write(&req_path_gen, &prompt)
+        .unwrap_or_else(|_| panic!("Failed to write request file: {}", req_path_gen));
 
     eprintln!("Calling Groq API");
     let groq = lib::groq::Groq::new();
@@ -104,6 +105,10 @@ fn main() {
         "Please CAREFULLY evaluate the below description (enclosed into <result-description></result-description>), and two outputs corresponding to this description, first one enclosed into \"<first-result></first-result>\" and the second enclosed into \"<second-result></second-result>\", with compile errors of first result included into \"<first-compile-errors></first-compile-errors>\" and second compile errors as \"<second-compile-errors></second-compile-errors>\", and evaluate which of the two is more precise and correct in implementing the description - and also which of them compiles! Then, if the first result is better, output the phrase 'First result is better.', if the second result is better, output the phrase 'The second implementation is better.'. Output only one of the two phrases, and nothing else\n\n<result-description>\n{}\n</result-description>\n\n<first-result>\n{}</first-result>\n\n<second-result>\n{}</second-result>\n\n<first-compile-errors>\n{}</first-compile-errors>\n\n<second-compile-errors>\n{}</second-compile-errors>",
         description, original_content, response, first_compile_errors.join("\n"), second_compile_errors.join("\n")
     );
+
+    eprintln!("Saving evaluation request to: {}", req_path_eval);
+    fs::write(&req_path_eval, &eval_prompt)
+        .unwrap_or_else(|_| panic!("Failed to write evaluation request file"));
 
     eprintln!("Calling Groq API for evaluation");
     let groq_eval = lib::groq::Groq::new();
