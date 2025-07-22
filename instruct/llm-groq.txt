@@ -20,7 +20,9 @@ After obtaining the reply from LLM, and before rewriting the output_result file,
 Then, include the contents of the file with the description (first program argument is the file name), the original content (file name is the second argument), and the content of the first LLM response, and check the reply from the LLM.
 If the response is "The second implementation is better." then the program would write the content of the output of the model into the output file name.
 
-If the response is "First result is better." then do nothing, and if the response is anything else then exit with an error.
+If the response is "First result is better." then do nothing but just update the mtime attribute on the file so it is seen as modified by an underlying OS.
+
+If the response is anything else then exit with an error.
 
 Use lower temperature (0.1) and fewer max_tokens (100) for the evaluation call to get more consistent responses.
 
