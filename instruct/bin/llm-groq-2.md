@@ -15,8 +15,6 @@ and the code should do the following with them:
 
 Save the entire request into a file "/tmp/llm-req-<pid>.txt" for reference.
 
-Save the response from LLM into the file having the file with the name like the output file but with ".draft" appended to it. 
-
 Rename the original output file with the name ".orig" appended to it, and save the copy of new LLM reply into output file.
 
 Perform "cargo check" with necessary flags to obtain json output, and filter the error messages only, that relate to the file in question.

@@ -23,6 +23,9 @@ fn main() {
     let orig_path = format!("{}.orig", output_file);
     let rej_path = format!("{}.rej", output_file);
 
+    let pid = std::process::id();
+    let req_path = format!("/tmp/llm-req-{}.txt", pid);
+
     let prompt = if !output_path.exists()
         || fs::metadata(output_path)
             .map(|m| m.len() == 0)
@@ -40,6 +43,9 @@ fn main() {
         )
     };
 
+    fs::write(&req_path, &prompt)
+        .unwrap_or_else(|_| panic!("Failed to write request file: {}", req_path));
+
     let groq = lib::groq::Groq::new();
     let response = groq.evaluate(&prompt);
 
@@ -55,11 +61,7 @@ fn main() {
     let mut compile_errors = Vec::new();
     for line in stderr.lines() {
         if line.contains(output_file) {
-            if let Ok(json) = serde_json::from_str::<serde_json::Value>(line) {
-                if let Some(msg) = json.get("message") {
-                    compile_errors.push(msg.to_string());
-                }
-            }
+            compile_errors.push(line.to_string());
         }
     }
 
@@ -115,4 +117,3 @@ fn main() {
         std::process::exit(1);
     }
 }
-
