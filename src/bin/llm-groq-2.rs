@@ -5,6 +5,7 @@ use std::fs;
 use std::io::{self, Write};
 use std::path::Path;
 use std::time::SystemTime;
+use std::os::unix::fs::MetadataExt;
 
 #[derive(Serialize)]
 struct GroqRequest {
@@ -49,7 +50,12 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     let output_exists = Path::new(output_file).exists();
     let output_content = if output_exists {
-        fs::read_to_string(output_file).unwrap_or_default()
+        let content = fs::read_to_string(output_file).unwrap_or_default();
+        if content.trim().is_empty() {
+            String::new()
+        } else {
+            content
+        }
     } else {
         String::new()
     };
@@ -92,7 +98,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     fs::write(&draft_file, llm_output)?;
 
     if output_content.is_empty() {
-        println!("No existing output file, writing new content to: {}", output_file);
+        println!("No existing output file or file is empty, writing new content to: {}", output_file);
         fs::write(output_file, llm_output)?;
         println!("Successfully created output file");
         return Ok(());
@@ -140,15 +146,15 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         }
         "First result is better." => {
             println!("Existing implementation is better, updating modification time only");
-            let file = fs::OpenOptions::new()
-                .write(true)
-                .open(output_file)?;
-            file.set_modified(SystemTime::now())?;
+            let now = SystemTime::now();
+            filetime::set_file_mtime(output_file, filetime::FileTime::from_system_time(now))?;
             fs::rename(&draft_file, &reject_file)?;
             println!("Draft file renamed to: {}", reject_file);
         }
         _ => {
             eprintln!("Unexpected evaluation response: {}", evaluation);
+            fs::rename(&draft_file, &reject_file)?;
+            println!("Draft file renamed to: {}", reject_file);
             std::process::exit(1);
         }
     }
