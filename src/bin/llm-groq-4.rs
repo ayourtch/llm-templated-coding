@@ -8,12 +8,12 @@ use filetime::FileTime;
 mod lib;
 
 fn main() {
-    eprintln!("Starting program");
     let args: Vec<String> = env::args().collect();
     if args.len() != 3 {
         eprintln!("Usage: {} <input_file> <output_file>", args[0]);
         std::process::exit(1);
     }
+    eprintln!("Starting program {}", args[0]);
     let input_file = &args[1];
     let output_file = &args[2];
 
@@ -53,6 +53,7 @@ fn main() {
     let first_compiler_errors = if output_path.exists() {
         run_cargo_check(output_file)
     } else {
+        eprintln!("No cargo check");
         Vec::new()
     };
 
@@ -152,6 +153,7 @@ fn main() {
 }
 
 fn run_cargo_check(file_path: &str) -> Vec<String> {
+    eprintln!("Running cargo check, focus on file {}", file_path);
     let output = Command::new("cargo")
         .args(&["check", "--message-format", "json"])
         .stdout(Stdio::piped())
@@ -165,9 +167,12 @@ fn run_cargo_check(file_path: &str) -> Vec<String> {
     for line in stdout.lines() {
         if let Ok(json) = serde_json::from_str::<serde_json::Value>(line) {
             if let Some(rendered) = json.get("rendered").and_then(|v| v.as_str()) {
-                if rendered.contains(file_path) && rendered.contains("error: ") {
+                if rendered.contains(file_path) && rendered.contains("err") {
+                    eprintln!("COMPILER ERROR: {}", &rendered);
                     errors.push(rendered.to_string());
                 }
+            } else {
+                eprintln!("STRANGE ERROR: {:?}", &json);
             }
         }
     }
