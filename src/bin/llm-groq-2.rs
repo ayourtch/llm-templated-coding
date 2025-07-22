@@ -67,10 +67,10 @@ fn main() {
         .expect("Failed to execute cargo check");
 
     let stderr = String::from_utf8_lossy(&compile_check.stderr);
-    let mut compile_errors = Vec::new();
+    let mut first_compile_errors = Vec::new();
     for line in stderr.lines() {
         if line.contains(output_file) {
-            compile_errors.push(line.to_string());
+            first_compile_errors.push(line.to_string());
         }
     }
 
@@ -86,9 +86,23 @@ fn main() {
             .unwrap_or_else(|_| panic!("Failed to rename original file"));
     }
 
+    eprintln!("Running second cargo check");
+    let second_compile_check = Command::new("cargo")
+        .args(&["check", "--message-format", "json"])
+        .output()
+        .expect("Failed to execute second cargo check");
+
+    let second_stderr = String::from_utf8_lossy(&second_compile_check.stderr);
+    let mut second_compile_errors = Vec::new();
+    for line in second_stderr.lines() {
+        if line.contains(output_file) {
+            second_compile_errors.push(line.to_string());
+        }
+    }
+
     let eval_prompt = format!(
-        "Please CAREFULLY evaluate the below description (enclosed into <result-description></result-description>), and two outputs corresponding to this description, first one enclosed into \"<first-result></first-result>\" and the second enclosed into \"<second-result></second-result>\", with compile errors of second result included into \"<compile-errors></compile-errors>\", and evaluate which of the two is more precise and correct in implementing the description. Then, if the first result is better, output the phrase 'First result is better.', if the second result is better, output the phrase 'The second implementation is better.'. Output only one of the two phrases, and nothing else\n\n<result-description>\n{}\n</result-description>\n\n<first-result>\n{}\n</first-result>\n\n<second-result>\n{}\n</second-result>\n\n<compile-errors>\n{}\n</compile-errors>",
-        description, original_content, response, compile_errors.join("\n")
+        "Please CAREFULLY evaluate the below description (enclosed into <result-description></result-description>), and two outputs corresponding to this description, first one enclosed into \"<first-result></first-result>\" and the second enclosed into \"<second-result></second-result>\", with compile errors of first result included into \"<first-compile-errors></first-compile-errors>\" and second compile errors as \"<second-compile-errors></second-compile-errors>\", and evaluate which of the two is more precise and correct in implementing the description - and also which of them compiles! Then, if the first result is better, output the phrase 'First result is better.', if the second result is better, output the phrase 'The second implementation is better.'. Output only one of the two phrases, and nothing else\n\n<result-description>\n{}\n</result-description>\n\n<first-result>\n{}</first-result>\n\n<second-result>\n{}</second-result>\n\n<first-compile-errors>\n{}</first-compile-errors>\n\n<second-compile-errors>\n{}</second-compile-errors>",
+        description, original_content, response, first_compile_errors.join("\n"), second_compile_errors.join("\n")
     );
 
     eprintln!("Calling Groq API for evaluation");
@@ -100,7 +114,7 @@ fn main() {
 
     if trimmed == "First result is better." {
         eprintln!("First result is better");
-        if compile_errors.is_empty() {
+        if first_compile_errors.is_empty() {
             eprintln!("No compile errors, restoring original");
             if Path::new(&orig_path).exists() {
                 fs::rename(&orig_path, output_file)
