@@ -92,7 +92,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         
         // Prepare evaluation prompt
         let evaluation_prompt = format!(
-            "Please evaluate the below description (enclosed into <result-description></result-description>), and two outputs corresponding to this description, first one enclosed into \"<first-result></first-result>\" and the second enclosed into \"<second-result></second-result>\", and evaluate which of the two is more precise and correct in implementing the description. Then, if the first result is better, output the phrase 'First result is better', if the second result is better, output the phrase 'The second implementation is better'. Output only one of the two phrases, and nothing else.\n\n<result-description>\n{}\n</result-description>\n\n<first-result>\n{}\n</first-result>\n\n<second-result>\n{}\n</second-result>",
+            "Please evaluate the below description (enclosed into <result-description></result-description>), and two outputs corresponding to this description, first one enclosed into \"<first-result></first-result>\" and the second enclosed into \"<second-result></second-result>\", and evaluate which of the two is more precise and correct in implementing the description. Then, if the first result is better, output the phrase 'First result is better.', if the second result is better, output the phrase 'The second implementation is better.'. Output only one of the two phrases, and nothing else.\n\n<result-description>\n{}\n</result-description>\n\n<first-result>\n{}\n</first-result>\n\n<second-result>\n{}\n</second-result>",
             input_content,
             existing_output,
             generated_text
@@ -135,17 +135,17 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         eprintln!("Evaluation result: {}", evaluation_result);
         
         match evaluation_result {
-            "First result is better" => {
+            "First result is better." => {
                 eprintln!("Keeping existing output file unchanged.");
                 return Ok(());
             },
-            "The second implementation is better" => {
+            "The second implementation is better." => {
                 eprintln!("Updating output file with new content.");
                 // Continue to write the new content below
             },
             _ => {
                 eprintln!("Error: Unexpected evaluation result: '{}'", evaluation_result);
-                eprintln!("Expected either 'First result is better' or 'The second implementation is better'");
+                eprintln!("Expected either 'First result is better.' or 'The second implementation is better.'");
                 process::exit(1);
             }
         }
