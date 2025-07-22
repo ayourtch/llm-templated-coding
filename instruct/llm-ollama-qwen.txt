@@ -1,0 +1,38 @@
+Please write a Rust program that implements calling a local Ollama model "qwen2.5-coder:14b" via HTTP API. Do not stop the output until you output the whole program. The code MUST compile from the first shot.
+
+Do not use any markdown separators please.
+
+I would like you to have the code accept two mandatory arguments being input and output files names, 
+and the code should do the following with them:
+
+- if the output file is non-existent or empty, it should just feed the contents of the input file after the following preamble: 
+
+   "Please produce single output result, which would match the description below as well as you can:"; 
+
+- if the file exists, then the prompt needs to be different:
+
+   "Please verify that the description below (enclosed into <result-description></result-description>) matches the specimen (enclosed into <result-specimen></result-specimen>) as much as possible. If it does - then simply output the content of the result-specimen verbatim. If you find that there are imperfections in how result-specimen fulfills its purpose described in result-description, then improve it and output the full result, with your improvements, BUT without any side comments/observations. Do not delimit the result with anything, output it verbatim." 
+
+Save the response from LLM into the file having the file with the name like the output file but with ".draft" appended to it. 
+
+After obtaining the reply from LLM, and before rewriting the output_result file, it should submit another request with the following prompt: "Please CAREFULLY evaluate the below description (enclosed into <result-description></result-description>), and two outputs corresponding to this description, first one enclosed into "<first-result></first-result>" and the second enclosed into "<second-result></second-result>", and evaluate which of the two is more precise and correct in implementing the description. Then, if the first result is better, output the phrase 'First result is better.', if the second result is better, output the phrase 'The second implementation is better.'. Output only one of the two phrases, and NOTHING else - not your thoughts, not analysis."
+
+Then, include the contents of the file with the description (first program argument is the file name), the original content (file name is the second argument), and the content of the first LLM response, and check the reply from the LLM.
+If the response is "The second implementation is better." then the program would write the content of the output of the model into the output file name.
+
+If the response is "First result is better." then do nothing but just update the mtime attribute on the file so it is seen as modified by an underlying OS.
+
+If the response is anything else then exit with an error.
+
+Important: do not delete the draft file, unless you have used the result from it - keep it for diagnostic purposes in case of error or bad suggestions - however, if its contents are not accepted, rename it with ".rej" instead of ".draft",
+and output the diff between the original output and the new not-accepted output. You can launch the command "diff -c" to do it.
+
+
+Use lower temperature (0.1) and fewer max_tokens (100) for the evaluation call to get more consistent responses.
+
+Trim whitespace from evaluation response to handle potential formatting differences.
+
+Provides clear error messages and status updates.
+
+Only updates the file when the new implementation is deemed better.
+
