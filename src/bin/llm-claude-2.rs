@@ -1,9 +1,3 @@
-[dependencies]
-reqwest = { version = "0.11", features = ["json", "blocking"] }
-serde_json = "1.0"
-tokio = { version = "1.0", features = ["full"] }
-filetime = "0.2"
-
 use std::env;
 use std::fs;
 use std::io::{self, Write};

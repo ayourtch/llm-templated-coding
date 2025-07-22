@@ -13,7 +13,7 @@ src/bin/llm-groq.rs: BINARY = llm-groq
 src/bin/llm-ollama-qwen.rs: BINARY = llm-groq
 
 # Generic pattern rule: any .txt in instruct/ creates corresponding .rs in src/bin/
-src/bin/%.rs: instruct/%.txt
-	cargo run --bin $(or $(BINARY),$(DEFAULT_BINARY)) -- instruct/$*.txt src/bin/$*.rs
+src/%.rs: instruct/%.txt
+	cargo run --bin $(or $(BINARY),$(DEFAULT_BINARY)) -- instruct/$*.txt src/$*.rs
 
 .PHONY: all
