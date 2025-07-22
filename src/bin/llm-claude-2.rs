@@ -1,9 +1,15 @@
+[dependencies]
+reqwest = { version = "0.11", features = ["json", "blocking"] }
+serde_json = "1.0"
+tokio = { version = "1.0", features = ["full"] }
+filetime = "0.2"
+
 use std::env;
 use std::fs;
 use std::io::{self, Write};
 use std::path::Path;
 use std::process::{Command, exit};
-use std::time::SystemTime;
+use filetime::{FileTime, set_file_mtime};
 use serde_json::{json, Value};
 
 fn main() {
@@ -80,11 +86,8 @@ fn main() {
         fs::remove_file(&draft_file).ok();
         println!("Output updated with improved implementation.");
     } else if evaluation_response == "First result is better." {
-        let file = fs::File::open(output_file).unwrap_or_else(|e| {
-            eprintln!("Error opening output file for touch {}: {}", output_file, e);
-            exit(1);
-        });
-        file.set_modified(SystemTime::now()).unwrap_or_else(|e| {
+        let now = FileTime::now();
+        set_file_mtime(output_file, now).unwrap_or_else(|e| {
             eprintln!("Error updating mtime for {}: {}", output_file, e);
             exit(1);
         });

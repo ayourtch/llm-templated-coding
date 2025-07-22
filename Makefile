@@ -3,7 +3,7 @@ DEFAULT_BINARY = llm-claude
 
 # Automatically discover all .txt files in instruct/ and convert to corresponding .rs files in src/bin/
 INSTRUCT_FILES := $(shell find instruct/ -name "*.txt")
-TARGETS := $(patsubst instruct/%.txt,src/bin/%.rs,$(INSTRUCT_FILES))
+TARGETS := $(patsubst instruct/%.txt,src/%.rs,$(INSTRUCT_FILES))
 
 # Default target - build all discovered targets
 all: $(TARGETS)
