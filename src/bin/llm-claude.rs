@@ -1,11 +1,12 @@
 use std::env;
 use std::fs;
 use std::io::{self, Write};
-use std::process::{self, Command};
+use std::process;
 use std::time::SystemTime;
 use reqwest;
 use serde_json::{json, Value};
 use tokio;
+use std::path::Path;
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
@@ -27,9 +28,11 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .map_err(|e| format!("Failed to read input file {}: {}", input_file, e))?;
     
     // Check if output file exists and is non-empty
-    let output_exists_and_not_empty = fs::metadata(output_file)
-        .map(|metadata| metadata.len() > 0)
-        .unwrap_or(false);
+    let output_exists_and_not_empty = Path::new(output_file).exists() && {
+        fs::metadata(output_file)
+            .map(|metadata| metadata.len() > 0)
+            .unwrap_or(false)
+    };
     
     let prompt = if output_exists_and_not_empty {
         // Read existing output file content
@@ -163,7 +166,13 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             "First result is better." => {
                 eprintln!("Keeping existing output file unchanged, updating mtime.");
                 // Update mtime on the output file
-                filetime::set_file_mtime(output_file, filetime::FileTime::now())?;
+                let now = SystemTime::now();
+                let since_epoch = now.duration_since(SystemTime::UNIX_EPOCH)?;
+                fs::OpenOptions::new()
+                    .write(true)
+                    .open(output_file)?
+                    .set_len(0)?;
+                fs::write(output_file, &existing_output)?;
                 
                 // Rename draft file to .rej since it wasn't accepted
                 let reject_file = format!("{}.rej", output_file);
@@ -171,23 +180,17 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                     .map_err(|e| format!("Failed to rename draft file to reject: {}", e))?;
                 eprintln!("Draft file renamed to: {}", reject_file);
                 
-                // Output the diff between original output and rejected output
-                let diff_output = Command::new("diff")
+                // Output diff between original and rejected
+                let diff_output = std::process::Command::new("diff")
                     .arg("-c")
                     .arg(output_file)
                     .arg(&reject_file)
-                    .output();
+                    .output()
+                    .expect("Failed to execute diff command");
                 
-                match diff_output {
-                    Ok(output) => {
-                        if !output.stdout.is_empty() {
-                            eprintln!("Diff between original and rejected output:");
-                            eprintln!("{}", String::from_utf8_lossy(&output.stdout));
-                        }
-                    },
-                    Err(e) => {
-                        eprintln!("Failed to run diff command: {}", e);
-                    }
+                if !diff_output.stdout.is_empty() {
+                    eprintln!("Diff between original and rejected version:");
+                    eprintln!("{}", String::from_utf8_lossy(&diff_output.stdout));
                 }
                 
                 return Ok(());
@@ -224,5 +227,4 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 reqwest = { version = "0.11", features = ["json"] }
 serde_json = "1.0"
 tokio = { version = "1.0", features = ["full"] }
-filetime = "0.2"
 */
