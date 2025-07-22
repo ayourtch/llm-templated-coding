@@ -1,18 +1,19 @@
-# Define the targets
-TARGETS = src/bin/llm-groq.rs src/bin/llm-groq-2.rs src/bin/llm-claude.rs src/bin/llm-ollama-qwen.rs src/bin/llm-claude-2.rs
+# Default binary
+DEFAULT_BINARY = llm-claude
 
-# Default target
+# Automatically discover all .txt files in instruct/ and convert to corresponding .rs files in src/bin/
+INSTRUCT_FILES := $(shell find instruct/ -name "*.txt")
+TARGETS := $(patsubst instruct/%.txt,src/bin/%.rs,$(INSTRUCT_FILES))
+
+# Default target - build all discovered targets
 all: $(TARGETS)
 
-# Set the binary to use for each target
+# Override binary for specific files (only specify if different from default)
 src/bin/llm-groq.rs: BINARY = llm-groq
 src/bin/llm-ollama-qwen.rs: BINARY = llm-groq
-src/bin/llm-claude.rs: BINARY = llm-groq
-src/bin/llm-groq-2.rs: BINARY = llm-claude
-src/bin/llm-claude-2.rs: BINARY = llm-claude
 
-# Generic pattern rule
+# Generic pattern rule: any .txt in instruct/ creates corresponding .rs in src/bin/
 src/bin/%.rs: instruct/%.txt
-	cargo run --bin $(BINARY) -- instruct/$*.txt src/bin/$*.rs
+	cargo run --bin $(or $(BINARY),$(DEFAULT_BINARY)) -- instruct/$*.txt src/bin/$*.rs
 
 .PHONY: all
