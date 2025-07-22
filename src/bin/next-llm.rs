@@ -1,7 +1,6 @@
 use std::{
     env,
     fs,
-    path::Path,
 };
 
 fn main() {
@@ -15,7 +14,7 @@ fn main() {
         for entry in entries.filter_map(Result::ok) {
             let name = entry.file_name().into_string().unwrap_or_default();
             if let Some(num) = extract_number(&name, &prefix, ".md") {
-                max_num = Some(max_num.map_or(num, |m| m.max(num)));
+                max_num = Some(max_num.map_or(num, |m: usize| m.max(num)));
             }
         }
     } else {
@@ -27,7 +26,7 @@ fn main() {
         for entry in entries.filter_map(Result::ok) {
             let name = entry.file_name().into_string().unwrap_or_default();
             if let Some(num) = extract_number(&name, &prefix, ".rs") {
-                max_num = Some(max_num.map_or(num, |m| m.max(num)));
+                max_num = Some(max_num.map_or(num, |m: usize| m.max(num)));
             }
         }
     } else {
