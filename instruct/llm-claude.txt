@@ -1,4 +1,4 @@
-Please write a Rust program that implements calling Anthropic model "Claude Sonnet 4" with auth token from an environment variable ANTHROPIC_API_KEY. Do not stop the output until you output the whole program. The code MUST compile from the first shot.
+Please write a Rust program that implements calling Anthropic model Claude Sonnet 4 (claude-sonnet-4-20250514) with auth token from an environment variable ANTHROPIC_API_KEY. Do not stop the output until you output the whole program. The code MUST compile from the first shot.
 
 Do not use any markdown separators please.
 
