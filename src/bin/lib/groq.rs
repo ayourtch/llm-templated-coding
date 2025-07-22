@@ -51,7 +51,7 @@ impl Groq {
                 role: "user",
                 content: prompt,
             }],
-            max_tokens: 1024,
+            max_tokens: 65536,
         };
 
         let response = self

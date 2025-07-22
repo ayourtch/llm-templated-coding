@@ -13,6 +13,7 @@ It would define Impl LlmCall with the following methods:
 
 - fn evaluate(prompt: &str) -> String  
   perform the evaluation of "prompt" within LLM and return the result.
+  max-tokens should be set to 65536.
 
 # Your implementation details
 
