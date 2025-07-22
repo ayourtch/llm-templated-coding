@@ -2,6 +2,7 @@ use std::env;
 use std::fs;
 use std::io::{self, Write};
 use std::process;
+use std::time::SystemTime;
 use reqwest;
 use serde_json::{json, Value};
 use tokio;
@@ -142,6 +143,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         match evaluation_result {
             "First result is better." => {
                 eprintln!("Keeping existing output file unchanged.");
+                // Update mtime as requested
+                let _ = filetime::set_file_mtime(output_file, filetime::FileTime::now());
                 // Clean up draft file
                 let _ = fs::remove_file(draft_file);
                 return Ok(());
@@ -176,4 +179,5 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 reqwest = { version = "0.11", features = ["json"] }
 serde_json = "1.0"
 tokio = { version = "1.0", features = ["full"] }
+filetime = "0.2"
 */
