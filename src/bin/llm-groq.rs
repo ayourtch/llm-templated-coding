@@ -85,6 +85,11 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .as_str()
         .ok_or("Failed to extract generated text from response")?;
     
+    // Save draft file
+    let draft_file = format!("{}.draft", output_file);
+    fs::write(&draft_file, generated_text)
+        .map_err(|e| format!("Failed to write draft file {}: {}", draft_file, e))?;
+    
     // If output file exists and has content, we need to compare
     if output_exists_and_not_empty {
         let existing_output = fs::read_to_string(output_file)
@@ -92,7 +97,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         
         // Prepare evaluation prompt
         let evaluation_prompt = format!(
-            "Please evaluate the below description (enclosed into <result-description></result-description>), and two outputs corresponding to this description, first one enclosed into \"<first-result></first-result>\" and the second enclosed into \"<second-result></second-result>\", and evaluate which of the two is more precise and correct in implementing the description. Then, if the first result is better, output the phrase 'First result is better.', if the second result is better, output the phrase 'The second implementation is better.'. Output only one of the two phrases, and nothing else.\n\n<result-description>\n{}\n</result-description>\n\n<first-result>\n{}\n</first-result>\n\n<second-result>\n{}\n</second-result>",
+            "Please evaluate the below description (enclosed into *<result-description></result-description>), and two outputs corresponding to this description, first one enclosed into \"<first-result></first-result>\" and the second enclosed into \"<second-result></second-result>\", and evaluate which of the two is more precise and correct in implementing the description. Then, if the first result is better, output the phrase 'First result is better.', if the second result is better, output the phrase 'The second implementation is better.'. Output only one of the two phrases, and nothing else.\n\n<result-description>\n{}\n</result-description>\n\n<first-result>\n{}\n</first-result>\n\n<second-result>\n{}\n</second-result>",
             input_content,
             existing_output,
             generated_text
@@ -137,6 +142,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         match evaluation_result {
             "First result is better." => {
                 eprintln!("Keeping existing output file unchanged.");
+                // Clean up draft file
+                let _ = fs::remove_file(draft_file);
                 return Ok(());
             },
             "The second implementation is better." => {
@@ -154,6 +161,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // Write the result to the output file
     fs::write(output_file, generated_text)
         .map_err(|e| format!("Failed to write to {}: {}", output_file, e))?;
+    
+    // Clean up draft file if it exists
+    let _ = fs::remove_file(draft_file);
     
     eprintln!("Output written to: {}", output_file);
     
