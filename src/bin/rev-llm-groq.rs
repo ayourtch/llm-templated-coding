@@ -35,7 +35,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let (prompt, use_verification) = if !output_path.exists() || output_path.metadata()?.len() == 0 {
         (
             format!(
-                "Please produce a detailed specification which will allow to recreate the implementation below from first principles:\n{}",
+                "Please produce a detailed specification which will allow to recreate the implementation below from first principles:\n\n{}",
                 specimen
             ),
             false,
@@ -85,7 +85,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     fs::write(&draft_path, first_response)?;
 
     let eval_prompt = format!(
-        "Please CAREFULLY evaluate the below specimen (enclosed into <result-specimen></result-specimen>), and two outputs corresponding to this description, first one enclosed into \"<first-specification></first-specification>\" and the second enclosed into \"<second-specification></second-specification>\", and evaluate which of the two is more precise and correct in describing the specimen. Then, if the first result is better, output the phrase 'First specification is better.', if the second description is better, output the phrase 'The second spec is better.'. Output only one of the two phrases, and nothing else\n\n<result-specimen>\n{}\n</result-specimen>\n\n<first-specification>\n{}\n</first-specification>\n\n<second-specification>\n{}\n</second-specification>",
+        "Please CAREFULLY evaluate the below specimen (enclosed into <result-specimen></result-specimen>), and two outputs corresponding to this description, first one enclosed into \"<first-specification></first-specification>\" and the second enclosed into \"<second-specification></second-specification>\", and evaluate which of the two is more precise and correct in describing the specimen. Then, if the first result is better, output the phrase 'First specification is better.', if the second description is better, output the phrase 'The second spec is better.'. Output only one of the two phrases, and nothing else.\n\n<result-specimen>\n{}\n</result-specimen>\n\n<first-specification>\n{}\n</first-specification>\n\n<second-specification>\n{}\n</second-specification>",
         specimen,
         fs::read_to_string(output_file)?,
         first_response
@@ -132,4 +132,3 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     Ok(())
 }
-
