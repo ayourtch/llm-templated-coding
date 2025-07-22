@@ -156,7 +156,7 @@ fn run_cargo_check(output_file: &str) -> Vec<String> {
         .output()
         .expect("Failed to execute cargo check");
 
-    let stderr = String::from_utf8_lossy(&output.stderr);
+    let stderr = String::from_utf8_lossy(&output.stdout);
     let mut errors = Vec::new();
     for line in stderr.lines() {
         if line.contains(output_file) {

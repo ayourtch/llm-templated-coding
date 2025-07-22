@@ -73,9 +73,9 @@ fn main() {
         .output()
         .expect("Failed to execute cargo check");
 
-    let stderr = String::from_utf8_lossy(&compile_check.stderr);
+    let stdout = String::from_utf8_lossy(&compile_check.stdout);
     let mut first_compile_errors = Vec::new();
-    for line in stderr.lines() {
+    for line in stdout.lines() {
         if line.contains(output_file) {
             first_compile_errors.push(line.to_string());
         }
