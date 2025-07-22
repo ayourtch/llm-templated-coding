@@ -144,6 +144,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         match evaluation_result {
             "First result is better." => {
                 eprintln!("Keeping existing output file unchanged.");
+                // Rename draft to rejected
+                let rejected_file = format!("{}.rej", output_file);
+                fs::rename(&draft_file, &rejected_file)?;
                 // Update mtime as requested
                 let file_time = FileTime::from_system_time(SystemTime::now());
                 filetime::set_file_mtime(output_file, file_time)?;
