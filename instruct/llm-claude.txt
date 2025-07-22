@@ -11,7 +11,7 @@ and the code should do the following with them:
 
 - if the file exists, then the prompt needs to be different:
 
-   "Please verify that the description below (enclosed into <result-description></result-description>) matches the specimen (enclosed into <result-specimen></result-specimen>) as much as possible. If it does - then simply output the content of the result-specimen verbatim. If you find that there are imperfections in how result-specimen fulfills its purpose described in result-description, then improve it and output the full result, with your improvements. Do not delimit the result with anything, output it verbatim." 
+   "Please verify that the description below (enclosed into <result-description></result-description>) matches the specimen (enclosed into <result-specimen></result-specimen>) as much as possible. If it does - then simply output the content of the result-specimen verbatim. If you find that there are imperfections in how result-specimen fulfills its purpose described in result-description, then improve it and output the full result, with your improvements, BUT without any side comments/observations. Do not delimit the result with anything, output it verbatim." 
 
 Save the response from LLM into the file having the file with the name like the output file but with ".draft" appended to it. 
 
