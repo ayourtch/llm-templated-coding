@@ -26,7 +26,9 @@ If the response is "First result is better." then do nothing but just update the
 
 If the response is anything else then exit with an error.
 
-Important: do not delete the draft file, unless you have used the result from it - keep it for diagnostic purposes in case of error or bad suggestions - however, if its contents are not accepted, rename it with ".rej" instead of ".draft".
+Important: do not delete the draft file, unless you have used the result from it - keep it for diagnostic purposes in case of error or bad suggestions - however, if its contents are not accepted, rename it with ".rej" instead of ".draft",
+and output the diff between the original output and the new not-accepted output. You can launch the command "diff -c" to do it.
+
 
 Use lower temperature (0.1) and fewer max_tokens (100) for the evaluation call to get more consistent responses.
 

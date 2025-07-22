@@ -1,7 +1,7 @@
 use std::env;
 use std::fs;
 use std::io::{self, Write};
-use std::process;
+use std::process::{self, Command};
 use std::time::SystemTime;
 use reqwest;
 use serde_json::{json, Value};
@@ -170,6 +170,25 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 fs::rename(&draft_file, &reject_file)
                     .map_err(|e| format!("Failed to rename draft file to reject: {}", e))?;
                 eprintln!("Draft file renamed to: {}", reject_file);
+                
+                // Output the diff between original output and rejected output
+                let diff_output = Command::new("diff")
+                    .arg("-c")
+                    .arg(output_file)
+                    .arg(&reject_file)
+                    .output();
+                
+                match diff_output {
+                    Ok(output) => {
+                        if !output.stdout.is_empty() {
+                            eprintln!("Diff between original and rejected output:");
+                            eprintln!("{}", String::from_utf8_lossy(&output.stdout));
+                        }
+                    },
+                    Err(e) => {
+                        eprintln!("Failed to run diff command: {}", e);
+                    }
+                }
                 
                 return Ok(());
             },
