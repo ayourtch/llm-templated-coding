@@ -1,13 +1,14 @@
-use std::{
-    env,
-    fs::{self, File, OpenOptions},
-    io::{Read, Write},
-    process::{Command, Stdio},
-};
+use std::env;
+use std::fs;
+use std::path::Path;
+use std::process::Command;
+use std::time::SystemTime;
+use filetime::FileTime;
 
 mod lib;
 
 fn main() {
+    eprintln!("Starting program");
     let args: Vec<String> = env::args().collect();
     if args.len() != 3 {
         eprintln!("Usage: {} <input_file> <output_file>", args[0]);
@@ -16,128 +17,148 @@ fn main() {
     let input_file = &args[1];
     let output_file = &args[2];
 
+    eprintln!("Checking output file status with git");
+    if Path::new(output_file).exists() {
+        let git_status = Command::new("git")
+            .args(&["status", "--porcelain", output_file])
+            .output()
+            .expect("Failed to execute git status");
+        
+        let output = String::from_utf8_lossy(&git_status.stdout);
+        if !output.trim().is_empty() {
+            eprintln!("Error: Output file has uncommitted changes");
+            std::process::exit(1);
+        }
+    }
+
+    eprintln!("Reading input file: {}", input_file);
+    let description = fs::read_to_string(input_file)
+        .unwrap_or_else(|_| panic!("Failed to read input file: {}", input_file));
+
+    let output_path = Path::new(output_file);
+    let draft_path = format!("{}.draft", output_file);
+    let rej_path = format!("{}.rej", output_file);
+
     let pid = std::process::id();
+    let req_path_gen = format!("/tmp/llm-req-{}-gen.txt", pid);
+    let resp_path_gen = format!("/tmp/llm-req-{}-gen-resp.txt", pid);
+    let req_path_eval = format!("/tmp/llm-req-{}-eval.txt", pid);
+    let resp_path_eval = format!("/tmp/llm-req-{}-eval-resp.txt", pid);
 
-    let description = fs::read_to_string(input_file).expect("Failed to read input file");
-
-    let prompt = if !Path::new(output_file).exists() || fs::metadata(output_file).unwrap().len() == 0 {
+    let prompt = if !output_path.exists()
+        || fs::metadata(output_path)
+            .map(|m| m.len() == 0)
+            .unwrap_or(true)
+    {
+        eprintln!("Output file doesn't exist or is empty - using initial prompt");
         format!(
             "Please produce single output result, which would match the description below as well as you can:\n\n{}",
             description
         )
     } else {
-        let specimen = fs::read_to_string(output_file).expect("Failed to read output file");
+        eprintln!("Output file exists - using verification prompt");
+        let specimen = fs::read_to_string(output_file).unwrap_or_default();
         format!(
             "Please verify that the description below (enclosed into <result-description></result-description>) matches the specimen (enclosed into <result-specimen></result-specimen>) as much as possible. If it does - then simply output the content of the result-specimen verbatim. If you find that there are imperfections in how result-specimen fulfills its purpose described in result-description, then improve it and output the full result, with your improvements. Do not delimit the result with anything, output it verbatim.\n\n<result-description>\n{}\n</result-description>\n\n<result-specimen>\n{}\n</result-specimen>",
             description, specimen
         )
     };
 
-    let req_file = format!("/tmp/llm-req-{}-gen.txt", pid);
-    let mut file = File::create(&req_file).expect("Failed to create gen request file");
-    file.write_all(prompt.as_bytes()).expect("Failed to write gen request");
+    eprintln!("Saving request to: {}", req_path_gen);
+    fs::write(&req_path_gen, &prompt)
+        .unwrap_or_else(|_| panic!("Failed to write request file: {}", req_path_gen));
 
-    eprintln!("Sending generation request to LLM...");
+    eprintln!("Calling Groq API");
     let groq = lib::groq::Groq::new();
     let response = groq.evaluate(&prompt);
 
-    let resp_file = format!("/tmp/llm-req-{}-gen-resp.txt", pid);
-    let mut file = File::create(&resp_file).expect("Failed to create gen response file");
-    file.write_all(response.as_bytes()).expect("Failed to write gen response");
+    eprintln!("Saving response to: {}", resp_path_gen);
+    fs::write(&resp_path_gen, &response)
+        .unwrap_or_else(|_| panic!("Failed to write response file: {}", resp_path_gen));
 
-    eprintln!("Running cargo check on first result...");
-    let first_errors = cargo_check(&response);
+    eprintln!("Writing draft to: {}", draft_path);
+    fs::write(&draft_path, &response)
+        .unwrap_or_else(|_| panic!("Failed to write draft file: {}", draft_path));
 
-    let backup_file = format!("{}.orig", output_file);
-    if Path::new(output_file).exists() {
-        fs::rename(output_file, &backup_file).expect("Failed to rename output file");
-    }
+    eprintln!("Running first cargo check");
+    let first_compile_errors = run_cargo_check(output_file);
 
-    let mut file = File::create(output_file).expect("Failed to create output file");
-    file.write_all(response.as_bytes()).expect("Failed to write output");
+    let original_content = if output_path.exists() {
+        fs::read_to_string(output_file).unwrap_or_default()
+    } else {
+        String::new()
+    };
 
-    eprintln!("Running cargo check on second result...");
-    let second_errors = cargo_check(&response);
+    eprintln!("Running second cargo check");
+    let second_compile_errors = run_cargo_check(output_file);
 
     let eval_prompt = format!(
-        "Please CAREFULLY evaluate the below description (enclosed into <result-description></result-description>), and two outputs corresponding to this description, first one enclosed into \"<first-result></first-result>\" and the second enclosed into \"<second-result></second-result>\", with compile errors of first result included into \"<first-compile-errors></first-compile-errors>\" and second compile errors as \"<second-compile-errors></second-compile-errors>\", and evaluate which of the two is more precise and correct in implementing the description - and also which of them compiles! Then, if the first result is better, output the phrase 'First result is better.', if the second result is better, output the phrase 'The second implementation is better.'. Output only one of the two phrases, and nothing else\n\n<result-description>\n{}\n</result-description>\n\n<first-result>\n{}\n</first-result>\n\n<first-compile-errors>\n{}\n</first-compile-errors>\n\n<second-result>\n{}\n</second-result>\n\n<second-compile-errors>\n{}\n</second-compile-errors>",
-        description, response, first_errors, response, second_errors
+        "Please CAREFULLY evaluate the below description (enclosed into <result-description></result-description>), and two outputs corresponding to this description, first one enclosed into \"<first-result></first-result>\" and the second enclosed into \"<second-result></second-result>\", with compile errors of first result included into \"<first-compile-errors></first-compile-errors>\" and second compile errors as \"<second-compile-errors></second-compile-errors>\", and evaluate which of the two is more precise and correct in implementing the description - and also which of them compiles! Then, if the first result is better, output the phrase 'First result is better.', if the second result is better, output the phrase 'The second implementation is better.'. Output only one of the two phrases, and nothing else\n\n<result-description>\n{}\n</result-description>\n\n<first-result>\n{}</first-result>\n\n<second-result>\n{}</second-result>\n\n<first-compile-errors>\n{}</first-compile-errors>\n\n<second-compile-errors>\n{}</second-compile-errors>",
+        description, original_content, response, first_compile_errors.join("\n"), second_compile_errors.join("\n")
     );
 
-    let eval_req_file = format!("/tmp/llm-req-{}-eval.txt", pid);
-    let mut file = File::create(&eval_req_file).expect("Failed to create eval request file");
-    file.write_all(eval_prompt.as_bytes()).expect("Failed to write eval request");
+    eprintln!("Saving evaluation request to: {}", req_path_eval);
+    fs::write(&req_path_eval, &eval_prompt)
+        .unwrap_or_else(|_| panic!("Failed to write evaluation request file"));
 
-    eprintln!("Sending evaluation request to LLM...");
-    let eval_response = groq.evaluate(&eval_prompt);
+    eprintln!("Calling Groq API for evaluation");
+    let groq_eval = lib::groq::Groq::new();
+    let eval_response = groq_eval.evaluate(&eval_prompt);
+    let trimmed = eval_response.trim();
 
-    let eval_resp_file = format!("/tmp/llm-req-{}-eval-resp.txt", pid);
-    let mut file = File::create(&eval_resp_file).expect("Failed to create eval response file");
-    file.write_all(eval_response.as_bytes()).expect("Failed to write eval response");
+    eprintln!("Saving evaluation response to: {}", resp_path_eval);
+    fs::write(&resp_path_eval, &eval_response)
+        .unwrap_or_else(|_| panic!("Failed to write evaluation response file"));
 
-    let eval_response = eval_response.trim();
-    if eval_response == "The second implementation is better." {
-        eprintln!("Using second implementation...");
-    } else if eval_response == "First result is better." {
-        eprintln!("Using first implementation...");
-        if first_errors.is_empty() {
-            fs::rename(&backup_file, output_file).expect("Failed to restore original file");
-            let now = std::time::SystemTime::now();
-            filetime::set_file_mtime(output_file, filetime::FileTime::from_system_time(now)).expect("Failed to update mtime");
+    eprintln!("Evaluation result: {}", trimmed);
+
+    if trimmed == "First result is better." {
+        eprintln!("First result is better");
+        if first_compile_errors.is_empty() {
+            eprintln!("No compile errors, restoring original");
+            if Path::new(&draft_path).exists() {
+                fs::rename(&draft_path, &rej_path)
+                    .unwrap_or_else(|_| panic!("Failed to rename rejected draft"));
+            }
+            let now = SystemTime::now();
+            filetime::set_file_mtime(output_file, FileTime::from_system_time(now))
+                .expect("Failed to update mtime");
         } else {
-            let draft_file = format!("{}.rej", output_file);
-            fs::rename(output_file, &draft_file).expect("Failed to rename to rej");
-            fs::rename(&backup_file, output_file).expect("Failed to restore original file");
+            eprintln!("First result better but has compile errors");
+            if Path::new(&draft_path).exists() {
+                fs::rename(&draft_path, &rej_path)
+                    .unwrap_or_else(|_| panic!("Failed to rename rejected draft"));
+            }
+            std::process::exit(1);
+        }
+    } else if trimmed == "The second implementation is better." {
+        eprintln!("Second implementation is better");
+        fs::write(output_file, &response)
+            .unwrap_or_else(|_| panic!("Failed to write output file"));
+        if Path::new(&draft_path).exists() {
+            fs::remove_file(&draft_path)
+                .unwrap_or_else(|_| panic!("Failed to remove draft file"));
         }
     } else {
-        eprintln!("Unexpected evaluation response: {}", eval_response);
+        eprintln!("Unexpected evaluation response: {}", trimmed);
         std::process::exit(1);
     }
+
+    eprintln!("Program completed successfully");
 }
 
-use std::path::Path;
-
-fn cargo_check(code: &str) -> String {
-    let tmp_dir = format!("/tmp/cargo-check-{}", std::process::id());
-    fs::create_dir_all(&tmp_dir).expect("Failed to create temp dir");
-    fs::create_dir_all(format!("{}/src", tmp_dir)).expect("Failed to create src dir");
-
-    let cargo_toml = r#"[package]
-name = "temp"
-version = "0.1.0"
-edition = "2021"
-"#;
-
-    fs::write(format!("{}/Cargo.toml", tmp_dir), cargo_toml).expect("Failed to write Cargo.toml");
-    fs::write(format!("{}/src/main.rs", tmp_dir), code).expect("Failed to write main.rs");
-
+fn run_cargo_check(output_file: &str) -> Vec<String> {
     let output = Command::new("cargo")
-        .current_dir(&tmp_dir)
-        .arg("check")
-        .arg("--message-format=json")
-        .stdout(Stdio::piped())
-        .stderr(Stdio::piped())
+        .args(&["check", "--message-format", "json"])
         .output()
-        .expect("Failed to run cargo check");
-
-    fs::remove_dir_all(&tmp_dir).expect("Failed to remove temp dir");
+        .expect("Failed to execute cargo check");
 
     let stderr = String::from_utf8_lossy(&output.stderr);
     let mut errors = Vec::new();
-
     for line in stderr.lines() {
-        if let Ok(json) = serde_json::from_str::<serde_json::Value>(line) {
-            if let Some(reason) = json.get("reason").and_then(|v| v.as_str()) {
-                if reason == "compiler-message" {
-                    if let Some(message) = json.get("message") {
-                        if let Some(rendered) = message.get("rendered").and_then(|v| v.as_str()) {
-                            errors.push(rendered.to_string());
-                        }
-                    }
-                }
-            }
+        if line.contains(output_file) {
+            errors.push(line.to_string());
         }
     }
-
-    errors.join("\n")
+    errors
 }

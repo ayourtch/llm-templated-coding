@@ -5,6 +5,8 @@ Do not use any markdown separators please.
 I would like you to have the code accept two mandatory arguments being input and output files names, 
 and the code should do the following with them:
 
+- before doing anything else, verify that the output file is either not existstent, or perform "git status <output_file>" and verify that the file is not modified.
+
 - if the output file is non-existent or empty, it should just feed the contents of the input file after the following preamble: 
 
    "Please produce single output result, which would match the description below as well as you can:"; 
@@ -19,7 +21,7 @@ Get the response from LLM, save it in its entirety into "/tmp/llm-req-<pid>-gen-
 
 Perform "cargo check" with necessary flags to obtain json output, and filter the error messages only, that relate to the file in question.
 
-Rename the original output file with the name ".orig" appended to it, and save the copy of new LLM reply into output file.
+Save the copy of new LLM reply into output file.
 
 Perform "cargo check" with necessary flags to obtain json output *AGAIN*, and filter the error messages only, that relate to the file in question.
 
@@ -31,9 +33,9 @@ Save the entire request into a file "/tmp/llm-req-<pid>-eval.txt" for reference
 
 Get the response from LLM, save it in its entirety into "/tmp/llm-req-<pid>-eval-resp.txt" and check its contents.
 
-If the response is "The second implementation is better." then the program would write the content of the output of the model into the output file name.
+If the response is "First result is better." then if the compiler errors output is empty, then first perform "git checkout <outputfile>" to restore its contents, and just update the mtime attribute on the file so it is seen as modified by an underlying OS.
 
-If the response is "First result is better." then if the compiler errors output is empty, then restore the original file from .orig, and just update the mtime attribute on the file so it is seen as modified by an underlying OS.
+If the response is "The second implementation is better." then the program would the output of the model into the output file name.
 
 If the response is anything else then exit with an error.
 
@@ -54,3 +56,4 @@ The program must be in a simple sync fashion, do not use async please.
 
 Before each action - e.g. making LLM requests, renaming files, calling cargo check, etc. - send a short status message to stderr.
 
+Have repeated primitive operations, like running cargo check, factored out into functions.
