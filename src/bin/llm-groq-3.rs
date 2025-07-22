@@ -89,6 +89,9 @@ fn main() {
         String::new()
     };
 
+    fs::write(output_file, &response)
+        .unwrap_or_else(|_| panic!("Failed to write output file temporarily for second check"));
+    
     eprintln!("Running second cargo check");
     let second_compile_errors = run_cargo_check(output_file);
 
