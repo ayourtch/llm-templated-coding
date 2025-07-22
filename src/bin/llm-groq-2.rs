@@ -1,7 +1,7 @@
 use std::env;
 use std::fs;
 use std::path::Path;
-use std::process;
+use std::process::{Command, Stdio};
 use serde_json::json;
 use reqwest;
 use tokio;
@@ -13,7 +13,7 @@ async fn main() {
     
     if args.len() != 3 {
         eprintln!("Usage: {} <input_file> <output_file>", args[0]);
-        process::exit(1);
+        std::process::exit(1);
     }
     
     let input_file = &args[1];
@@ -24,7 +24,7 @@ async fn main() {
         Ok(key) => key,
         Err(_) => {
             eprintln!("Error: GROQ_API_KEY environment variable not set");
-            process::exit(1);
+            std::process::exit(1);
         }
     };
     
@@ -32,7 +32,7 @@ async fn main() {
         Ok(content) => content,
         Err(e) => {
             eprintln!("Error reading input file {}: {}", input_file, e);
-            process::exit(1);
+            std::process::exit(1);
         }
     };
     
@@ -77,7 +77,7 @@ async fn main() {
         Ok(resp) => resp,
         Err(e) => {
             eprintln!("Error sending request to Groq API: {}", e);
-            process::exit(1);
+            std::process::exit(1);
         }
     };
     
@@ -85,7 +85,7 @@ async fn main() {
         Ok(text) => text,
         Err(e) => {
             eprintln!("Error reading response: {}", e);
-            process::exit(1);
+            std::process::exit(1);
         }
     };
     
@@ -94,7 +94,7 @@ async fn main() {
         Err(e) => {
             eprintln!("Error parsing JSON response: {}", e);
             eprintln!("Response was: {}", response_text);
-            process::exit(1);
+            std::process::exit(1);
         }
     };
     
@@ -105,7 +105,7 @@ async fn main() {
     
     if let Err(e) = fs::write(&draft_file, &llm_response) {
         eprintln!("Error writing draft file: {}", e);
-        process::exit(1);
+        std::process::exit(1);
     }
     
     println!("Draft saved to {}", draft_file);
@@ -113,17 +113,53 @@ async fn main() {
     if !output_exists || output_content.trim().is_empty() {
         if let Err(e) = fs::write(output_file, &llm_response) {
             eprintln!("Error writing output file: {}", e);
-            process::exit(1);
+            std::process::exit(1);
         }
         println!("Output written to {}", output_file);
         return;
     }
     
+    println!("Checking compilation...");
+    
+    let check_output = Command::new("cargo")
+        .arg("check")
+        .arg("--message-format=json")
+        .output();
+    
+    let compile_errors = match check_output {
+        Ok(output) => {
+            let stdout = String::from_utf8_lossy(&output.stdout);
+            let stderr = String::from_utf8_lossy(&output.stderr);
+            
+            let all_output = format!("{}{}", stdout, stderr);
+            all_output
+                .lines()
+                .filter_map(|line| {
+                    if let Ok(json_val) = serde_json::from_str::<serde_json::Value>(line) {
+                        if let Some(filename) = json_val.get("file").and_then(|f| f.as_str()) {
+                            if filename.ends_with(".rs") {
+                                if let Some(msg) = json_val.get("message").and_then(|m| m.as_str()) {
+                                    return Some(msg.to_string());
+                                }
+                            }
+                        }
+                    }
+                    None
+                })
+                .collect::<Vec<_>>()
+                .join("\n")
+        }
+        Err(e) => {
+            eprintln!("Error running cargo check: {}", e);
+            String::new()
+        }
+    };
+    
     println!("Evaluating results...");
     
     let evaluation_prompt = format!(
-        "Please CAREFULLY evaluate the below description (enclosed into <result-description></result-description>), and two outputs corresponding to this description, first one enclosed into \"<first-result></first-result>\" and the second enclosed into \"<second-result></second-result>\", and evaluate which of the two is more precise and correct in implementing the description. Then, if the first result is better, output the phrase 'First result is better.', if the second result is better, output the phrase 'The second implementation is better.'. Output only one of the two phrases, and nothing else\n\n<result-description>\n{}\n</result-description>\n\n<first-result>\n{}\n</first-result>\n\n<second-result>\n{}\n</second-result>",
-        input_content, output_content, llm_response
+        "Please CAREFULLY evaluate the below description (enclosed into <result-description></result-description>), and two outputs corresponding to this description, first one enclosed into \"<first-result></first-result>\" and the second enclosed into \"<second-result></second-result>\", with compile errors of second result included into \"<compile-errors></compile-errors>\", and evaluate which of the two is more precise and correct in implementing the description. Then, if the first result is better, output the phrase 'First result is better.', if the second result is better, output the phrase 'The second implementation is better.'. Output only one of the two phrases, and nothing else\n\n<result-description>\n{}\n</result-description>\n\n<first-result>\n{}\n</first-result>\n\n<second-result>\n{}\n</second-result>\n\n<compile-errors>\n{}\n</compile-errors>",
+        input_content, output_content, llm_response, compile_errors
     );
     
     let eval_response = client
@@ -152,7 +188,7 @@ async fn main() {
             if let Err(rename_err) = fs::rename(&draft_file, &rej_file) {
                 eprintln!("Error renaming draft to rej: {}", rename_err);
             }
-            process::exit(1);
+            std::process::exit(1);
         }
     };
     
@@ -164,7 +200,7 @@ async fn main() {
             if let Err(rename_err) = fs::rename(&draft_file, &rej_file) {
                 eprintln!("Error renaming draft to rej: {}", rename_err);
             }
-            process::exit(1);
+            std::process::exit(1);
         }
     };
     
@@ -176,7 +212,7 @@ async fn main() {
             if let Err(rename_err) = fs::rename(&draft_file, &rej_file) {
                 eprintln!("Error renaming draft to rej: {}", rename_err);
             }
-            process::exit(1);
+            std::process::exit(1);
         }
     };
     
@@ -187,39 +223,54 @@ async fn main() {
     
     println!("Evaluation result: {}", evaluation);
     
-    match evaluation {
-        "The second implementation is better." => {
-            if let Err(e) = fs::write(output_file, &llm_response) {
-                eprintln!("Error writing output file: {}", e);
+    let orig_file = format!("{}.orig", output_file);
+    
+    if evaluation == "The second implementation is better." {
+        if fs::metadata(&orig_file).is_err() {
+            if let Err(e) = fs::copy(output_file, &orig_file) {
+                eprintln!("Error creating backup: {}", e);
                 let rej_file = format!("{}.rej", output_file);
                 if let Err(rename_err) = fs::rename(&draft_file, &rej_file) {
                     eprintln!("Error renaming draft to rej: {}", rename_err);
                 }
-                process::exit(1);
+                std::process::exit(1);
             }
-            if let Err(e) = fs::remove_file(&draft_file) {
-                eprintln!("Warning: Could not remove draft file: {}", e);
+        }
+        
+        if let Err(e) = fs::write(output_file, &llm_response) {
+            eprintln!("Error writing output file: {}", e);
+            let rej_file = format!("{}.rej", output_file);
+            if let Err(rename_err) = fs::rename(&draft_file, &rej_file) {
+                eprintln!("Error renaming draft to rej: {}", rename_err);
             }
-            println!("Output updated with improved version");
-        },
-        "First result is better." => {
+            std::process::exit(1);
+        }
+        
+        if let Err(e) = fs::remove_file(&draft_file) {
+            eprintln!("Warning: Could not remove draft file: {}", e);
+        }
+        
+        println!("Output updated with improved version");
+    } else if evaluation == "First result is better." {
+        if compile_errors.trim().is_empty() {
             let now = FileTime::now();
             if let Err(e) = set_file_mtime(output_file, now) {
                 eprintln!("Error updating file mtime: {}", e);
             }
-            let rej_file = format!("{}.rej", output_file);
-            if let Err(e) = fs::rename(&draft_file, &rej_file) {
-                eprintln!("Error renaming draft to rej: {}", e);
-            }
-            println!("Original version is better, file timestamp updated");
-        },
-        _ => {
-            eprintln!("Unexpected evaluation response: {}", evaluation);
-            let rej_file = format!("{}.rej", output_file);
-            if let Err(e) = fs::rename(&draft_file, &rej_file) {
-                eprintln!("Error renaming draft to rej: {}", e);
-            }
-            process::exit(1);
         }
+        
+        let rej_file = format!("{}.rej", output_file);
+        if let Err(e) = fs::rename(&draft_file, &rej_file) {
+            eprintln!("Error renaming draft to rej: {}", e);
+        }
+        
+        println!("Original version is better, file timestamp updated");
+    } else {
+        eprintln!("Unexpected evaluation response: {}", evaluation);
+        let rej_file = format!("{}.rej", output_file);
+        if let Err(e) = fs::rename(&draft_file, &rej_file) {
+            eprintln!("Error renaming draft to rej: {}", e);
+        }
+        std::process::exit(1);
     }
 }
