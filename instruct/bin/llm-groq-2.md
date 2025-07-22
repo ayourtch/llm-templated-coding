@@ -1,4 +1,4 @@
-Please write a Rust program that implements calling Groq model "moonshotai/kimi-k2-instruct" with auth token from an environment variable GROQ_API_KEY. Do not stop the output until you output the whole program. The code MUST compile from the first shot.
+Please write a Rust program that implements calling Groq model. Do not stop the output until you output the whole program. The code MUST compile from the first shot.
 
 Do not use any markdown separators please.
 
@@ -37,4 +37,13 @@ Trim whitespace from evaluation response to handle potential formatting differen
 Provides clear error messages and status updates.
 
 Only updates the file when the new implementation is deemed better.
+
+# Implementation details
+
+For groq interaction, do not create new code, but rather use a pre-existing library, which you can use by adding "mod lib;" into your code - this will refer to a preexisting library inside the source tree.
+
+Then, "lib::groq::Groq::new()" will return you a new instance of Groq, and calling ".evaluate(prompt)"
+on that instance will return you the evaluated response.
+
+The program must be in a simple sync fashion, do not use async please.
 
