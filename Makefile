@@ -1,5 +1,5 @@
 # Default binary
-DEFAULT_BINARY = llm-claude
+DEFAULT_BINARY = llm-groq
 
 # Automatically discover all .txt files in instruct/ and convert to corresponding .rs files in src/bin/
 INSTRUCT_FILES := $(shell find instruct/ -name "*.txt")
@@ -9,8 +9,8 @@ TARGETS := $(patsubst instruct/%.txt,src/%.rs,$(INSTRUCT_FILES))
 all: $(TARGETS)
 
 # Override binary for specific files (only specify if different from default)
-src/bin/llm-groq.rs: BINARY = llm-groq
-src/bin/llm-ollama-qwen.rs: BINARY = llm-groq
+src/bin/llm-groq.rs: BINARY = llm-claude
+src/bin/llm-ollama-qwen.rs: BINARY = llm-claude
 
 # Generic pattern rule: any .txt in instruct/ creates corresponding .rs in src/bin/
 src/%.rs: instruct/%.txt
