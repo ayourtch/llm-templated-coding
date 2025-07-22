@@ -13,7 +13,7 @@ and the code should do the following with them:
 
    "Please verify that the description below (enclosed into <result-description></result-description>) matches the specimen (enclosed into <result-specimen></result-specimen>) as much as possible. If it does - then simply output the content of the result-specimen verbatim. If you find that there are imperfections in how result-specimen fulfills its purpose described in result-description, then improve it and output the full result, with your improvements. Do not delimit the result with anything, output it verbatim." 
 
-Save the response from LLM into the file having the file with the name like the output file but with ".draft" appended to it.
+Save the response from LLM into the file having the file with the name like the output file but with ".draft" appended to it. If the file exists already, overwrite it - but do not delete the file you have just written, before exit.
 
 After obtaining the reply from LLM, and before rewriting the output_result file, it should submit another request with the following prompt: "Please CAREFULLY evaluate the below description (enclosed into <result-description></result-description>), and two outputs corresponding to this description, first one enclosed into "<first-result></first-result>" and the second enclosed into "<second-result></second-result>", and evaluate which of the two is more precise and correct in implementing the description. Then, if the first result is better, output the phrase 'First result is better.', if the second result is better, output the phrase 'The second implementation is better.'. Output only one of the two phrases, and nothing else"
 
