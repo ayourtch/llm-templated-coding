@@ -20,7 +20,7 @@ After obtaining the reply from LLM, and before rewriting the output result file,
 Then, include the contents of the file with the implementation (first program argument is the file name), the original specification (file name is the second argument), and the content of the first LLM response, and check the reply from the LLM.
 If the response is "The second spec is better." then the program would write the content of the output of the model into the output file name.
 
-If the response is "First specification is better." then do nothing but just update the mtime attribute on the file so it is seen as modified by an underlying OS.
+If the response is "First specification is better." then rename the draft file with ".rej" extension instead of ".draft".
 
 If the response is anything else then exit with an error.
 
@@ -32,3 +32,9 @@ Provide clear error messages and status updates.
 
 Only update the file when the new specification is deemed better.
 
+The following are the current Cargo.toml dependencies, which are assumed:
+[dependencies]
+tokio = { version = "1", features = ["full"] }
+reqwest = { version = "0.11", features = ["json"] }
+serde_json = "1.0"
+filetime = "0.2"
