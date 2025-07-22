@@ -144,7 +144,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             "First result is better." => {
                 eprintln!("Keeping existing output file unchanged.");
                 // Update mtime as requested
-                let _ = filetime::set_file_mtime(output_file, filetime::FileTime::now());
+                let file_time = filetime::FileTime::from_system_time(SystemTime::now());
+                filetime::set_file_mtime(output_file, file_time)?;
                 // Clean up draft file
                 let _ = fs::remove_file(draft_file);
                 return Ok(());
