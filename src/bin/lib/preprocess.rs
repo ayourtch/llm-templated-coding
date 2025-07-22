@@ -11,7 +11,7 @@ fn preprocess_with_depth(file_name: &str, depth: usize) -> String {
     }
 
     let path = Path::new(file_name);
-    let contents = fs::read_to_string(&path).expect("Unable to read file");
+    let contents = fs::read_to_string(&path).expect(&format!("Unable to read file {}", &file_name));
     let mut output = String::new();
     let mut cursor = 0;
 

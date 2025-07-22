@@ -1,6 +1,6 @@
-Please write a Rust program that implements calling Groq model. Do not stop the output until you output the whole program. The code MUST compile from the first shot.
+Please write a Rust program that implements calling Groq model.
 
-Do not use any markdown separators please.
+{!../../include/common.md!}
 
 I would like you to have the code accept two mandatory arguments being input and output files names, 
 and the code should do the following with them:

@@ -1,7 +1,7 @@
 use std::env;
 use std::fs;
-use std::path::{Path, PathBuf};
-use std::process::{Command, Stdio};
+use std::path::{Path};
+use std::process::{Command};
 use std::time::SystemTime;
 use filetime::FileTime;
 
@@ -215,6 +215,14 @@ fn run_cargo_check(source_file: &str) -> Vec<String> {
                             }
                         }
                     }
+                    // Handle messages without spans (global errors)
+                    else if message.get("level").and_then(|l| l.as_str()) == Some("error") {
+                        if let Some(rendered) = message.get("rendered").and_then(|r| r.as_str()) {
+                            errors.push(rendered.to_string());
+                        } else if let Some(msg_text) = message.get("message").and_then(|m| m.as_str()) {
+                            errors.push(msg_text.to_string());
+                        }
+                    }
                 }
             }
         }
@@ -226,4 +234,3 @@ fn run_cargo_check(source_file: &str) -> Vec<String> {
     
     errors
 }
-
