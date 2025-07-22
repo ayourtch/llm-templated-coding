@@ -6,14 +6,15 @@ A Rust library that implements calling Groq model "moonshotai/kimi-k2-instruct" 
 
 Code would define "struct Groq" with opaque contents.
 
-It would define Impl LlmCall with the following methods:
+It would define the following methods:
 
 - fn new()
   return the new instance of Groq API caller
 
 - fn evaluate(prompt: &str) -> String  
   perform the evaluation of "prompt" within LLM and return the result.
-  max-tokens should be set to 65536.
+  max-tokens should be set to 16384.
+  if the json parsing of the reply fails for whatever reason, output the whole response text to stderr, and panic.
 
 # Your implementation details
 

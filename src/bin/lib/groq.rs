@@ -51,7 +51,7 @@ impl Groq {
                 role: "user",
                 content: prompt,
             }],
-            max_tokens: 65536,
+            max_tokens: 16384,
         };
 
         let response = self
@@ -62,13 +62,21 @@ impl Groq {
             .send()
             .expect("Failed to send request");
 
-        let response: Response = response.json().expect("Failed to parse response");
-        response
-            .choices
-            .into_iter()
-            .next()
-            .expect("No choices returned")
-            .message
-            .content
+        let text = response.text().expect("Failed to get response text");
+        match serde_json::from_str::<Response>(&text) {
+            Ok(parsed) => {
+                parsed
+                    .choices
+                    .into_iter()
+                    .next()
+                    .expect("No choices returned")
+                    .message
+                    .content
+            }
+            Err(_) => {
+                eprintln!("{}", text);
+                panic!("Failed to parse JSON response");
+            }
+        }
     }
 }
