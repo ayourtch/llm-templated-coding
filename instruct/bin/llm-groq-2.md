@@ -13,6 +13,8 @@ and the code should do the following with them:
 
    "Please verify that the description below (enclosed into <result-description></result-description>) matches the specimen (enclosed into <result-specimen></result-specimen>) as much as possible. If it does - then simply output the content of the result-specimen verbatim. If you find that there are imperfections in how result-specimen fulfills its purpose described in result-description, then improve it and output the full result, with your improvements. Do not delimit the result with anything, output it verbatim." 
 
+Save the entire request into a file "/tmp/llm-req-<pid>.txt" for reference.
+
 Save the response from LLM into the file having the file with the name like the output file but with ".draft" appended to it. 
 
 Rename the original output file with the name ".orig" appended to it, and save the copy of new LLM reply into output file.
