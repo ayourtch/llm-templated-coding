@@ -2,6 +2,7 @@ use std::env;
 use std::fs;
 use std::io::{self, Write};
 use std::process;
+use std::time::SystemTime;
 use reqwest;
 use serde_json::{json, Value};
 use tokio;
@@ -17,6 +18,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     
     let input_file = &args[1];
     let output_file = &args[2];
+    let draft_file = format!("{}.draft", output_file);
     let api_key = env::var("ANTHROPIC_API_KEY")
         .expect("ANTHROPIC_API_KEY environment variable must be set");
     
@@ -50,7 +52,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let url = "https://api.anthropic.com/v1/messages";
     
     let payload = json!({
-        "model": "claude-opus-4-20250514",
+        "model": "claude-3-sonnet-20240229",
         "max_tokens": 8192,
         "temperature": 0.7,
         "messages": [{
@@ -95,6 +97,11 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         return Err("No text content found in response".into());
     }
     
+    // Save the response to draft file
+    fs::write(&draft_file, &generated_text)
+        .map_err(|e| format!("Failed to write draft file {}: {}", draft_file, e))?;
+    eprintln!("Draft saved to: {}", draft_file);
+    
     // If output file exists and has content, we need to compare
     if output_exists_and_not_empty {
         let existing_output = fs::read_to_string(output_file)
@@ -102,7 +109,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         
         // Prepare evaluation prompt
         let evaluation_prompt = format!(
-            "Please evaluate the below description (enclosed into <result-description></result-description>), and two outputs corresponding to this description, first one enclosed into \"<first-result></first-result>\" and the second enclosed into \"<second-result></second-result>\", and evaluate which of the two is more precise and correct in implementing the description. Then, if the first result is better, output the phrase 'First result is better.', if the second result is better, output the phrase 'The second implementation is better.'. Output only one of the two phrases, and nothing else.\n\n<result-description>\n{}\n</result-description>\n\n<first-result>\n{}\n</first-result>\n\n<second-result>\n{}\n</second-result>",
+            "Please CAREFULLY evaluate the below description (enclosed into <result-description></result-description>), and two outputs corresponding to this description, first one enclosed into \"<first-result></first-result>\" and the second enclosed into \"<second-result></second-result>\", and evaluate which of the two is more precise and correct in implementing the description. Then, if the first result is better, output the phrase 'First result is better.', if the second result is better, output the phrase 'The second implementation is better.'. Output only one of the two phrases, and nothing else\n\n<result-description>\n{}\n</result-description>\n\n<first-result>\n{}\n</first-result>\n\n<second-result>\n{}\n</second-result>",
             input_content,
             existing_output,
             generated_text
@@ -110,7 +117,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         
         // Make evaluation API call
         let eval_payload = json!({
-            "model": "claude-sonnet-4-20250514",
+            "model": "claude-3-sonnet-20240229",
             "max_tokens": 100,
             "temperature": 0.1,
             "messages": [{
@@ -154,7 +161,17 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         
         match evaluation_result {
             "First result is better." => {
-                eprintln!("Keeping existing output file unchanged.");
+                eprintln!("Keeping existing output file unchanged, updating mtime.");
+                // Update mtime on the output file
+                let metadata = fs::metadata(output_file)?;
+                filetime::set_file_mtime(output_file, filetime::FileTime::now())?;
+                
+                // Rename draft file to .rej since it wasn't accepted
+                let reject_file = format!("{}.rej", output_file);
+                fs::rename(&draft_file, &reject_file)
+                    .map_err(|e| format!("Failed to rename draft file to reject: {}", e))?;
+                eprintln!("Draft file renamed to: {}", reject_file);
+                
                 return Ok(());
             },
             "The second implementation is better." => {
@@ -163,7 +180,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             },
             _ => {
                 eprintln!("Error: Unexpected evaluation result: '{}'", evaluation_result);
-                eprintln!("Expected either 'First result is better' or 'The second implementation is better'");
+                eprintln!("Expected either 'First result is better.' or 'The second implementation is better.'");
+                // Keep draft file for diagnostic purposes
+                eprintln!("Draft file kept at: {} for diagnostic purposes", draft_file);
                 process::exit(1);
             }
         }
@@ -175,6 +194,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     
     eprintln!("Output written to: {}", output_file);
     
+    // Remove draft file since its content was accepted
+    fs::remove_file(&draft_file).ok();
+    
     Ok(())
 }
 
@@ -184,4 +206,5 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 reqwest = { version = "0.11", features = ["json"] }
 serde_json = "1.0"
 tokio = { version = "1.0", features = ["full"] }
+filetime = "0.2"
 */
