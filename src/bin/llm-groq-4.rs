@@ -152,34 +152,78 @@ fn main() {
     eprintln!("Program completed successfully");
 }
 
-fn run_cargo_check(file_path: &str) -> Vec<String> {
-    eprintln!("Running cargo check, focus on file {}", file_path);
+
+use serde_json::Value;
+
+/// Runs `cargo check --message-format json` and returns compilation errors 
+/// for the specified source file only.
+/// 
+/// # Arguments
+/// * `source_file` - The path to the source file to check for errors
+/// 
+/// # Returns
+/// A vector of error message strings for the specified source file
+/// 
+/// # Panics
+/// Panics if the cargo command cannot be executed or if JSON parsing fails
+fn run_cargo_check(source_file: &str) -> Vec<String> {
+    // Execute cargo check with JSON output
     let output = Command::new("cargo")
         .args(&["check", "--message-format", "json"])
-        .stdout(Stdio::piped())
-        .stderr(Stdio::piped())
         .output()
-        .expect("Failed to execute cargo check");
+        .expect("Failed to execute cargo check command");
 
-    let stdout = String::from_utf8_lossy(&output.stdout);
+    // Convert output to string
+    let stdout = String::from_utf8(output.stdout)
+        .expect("Failed to convert cargo output to UTF-8");
+
     let mut errors = Vec::new();
+    let source_path = Path::new(source_file);
     
+    // Parse each line of JSON output
     for line in stdout.lines() {
-        if let Ok(json) = serde_json::from_str::<serde_json::Value>(line) {
-            if let Some(rendered) = json.get("rendered").and_then(|v| v.as_str()) {
-                if rendered.contains(file_path) && rendered.contains("err") {
-                    eprintln!("COMPILER ERROR: {}", &rendered);
-                    errors.push(rendered.to_string());
+        if line.trim().is_empty() {
+            continue;
+        }
+        
+        // Parse JSON line
+        let json: Value = serde_json::from_str(line)
+            .expect("Failed to parse JSON output from cargo");
+        
+        // Check if this is a compiler message
+        if let Some(reason) = json.get("reason") {
+            if reason == "compiler-message" {
+                if let Some(message) = json.get("message") {
+                    // Check if this message has spans (location information)
+                    if let Some(spans) = message.get("spans").and_then(|s| s.as_array()) {
+                        for span in spans {
+                            if let Some(file_name) = span.get("file_name").and_then(|f| f.as_str()) {
+                                let span_path = Path::new(file_name);
+                                
+                                // Check if this error is from our target source file
+                                if span_path == source_path || 
+                                   span_path.file_name() == source_path.file_name() {
+                                    
+                                    // Extract the error message
+                                    if let Some(rendered) = message.get("rendered").and_then(|r| r.as_str()) {
+                                        errors.push(rendered.to_string());
+                                    } else if let Some(msg_text) = message.get("message").and_then(|m| m.as_str()) {
+                                        errors.push(msg_text.to_string());
+                                    }
+                                    break; // Found matching file, no need to check other spans
+                                }
+                            }
+                        }
+                    }
                 }
-            } else {
-                eprintln!("STRANGE ERROR: {:?}", &json);
             }
         }
     }
 
     if errors.len() > 20 {
-        errors.truncate(20);
+       errors.truncate(20);
     }
-
+    
     errors
 }
+
